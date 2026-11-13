@@ -1,0 +1,69 @@
+[
+ {
+  "eval": "(window.__edc.setTimeScale(0), window.__edc.loop.stop(), 1)"
+ },
+ {
+  "level": 2
+ },
+ {
+  "rock": {
+   "steps": 600,
+   "period": 80,
+   "slamEvery": 150
+  }
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=0; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang000"
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=0.7853981633974483; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang045"
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=1.0122; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang058"
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=1.5707963267948966; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang090"
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=2.356194490192345; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang135"
+ },
+ {
+  "eval": "(()=>{const d=window.__edc.sim.ctx.drum; d.theta=d.prevTheta=3.141592653589793; d.omega=0; window.__edc.view.resize(); window.__edc.step(1); return window.__edc.view.ctx.cameraRig.distance})()"
+ },
+ {
+  "step": 2
+ },
+ {
+  "shot": "ang180"
+ }
+]

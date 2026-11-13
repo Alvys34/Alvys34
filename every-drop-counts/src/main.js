@@ -11,11 +11,11 @@ import { createInput } from './core/input.js';
 import { createFeel } from './core/feel.js';
 import { seedFrom } from './core/rng.js';
 import { TUNABLES } from './core/tunables.js';
-import { getSave, recordShiftResult, recordOvertime } from './core/save.js';
+import { getSave } from './core/save.js';
 import { createSim } from './sim/index.js';
-import { getLevel, nextLevel } from './sim/levels/index.js';
 import { createRenderer } from './render/index.js';
 import { createUI } from './ui/index.js';
+import { createSimBus } from './ui/attract.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug') && params.get('debug') !== '0';
@@ -54,10 +54,11 @@ async function boot() {
   const save = getSave();
   const bus = createBus();
   const seed = seedFrom(params.get('seed'));
-  const sim = createSim({ RAPIER, bus, seed });
-  const quality = params.get('quality') || save.settings.quality;
+  // the sim talks through a gated bus: menus run it in attract mode without reaching audio/VFX
+  const simBus = createSimBus(bus);
+  const sim = createSim({ RAPIER, bus: simBus, seed });
+  const quality = params.get('quality') || (save.settings.quality === 'auto' ? 'high' : save.settings.quality);
   const view = createRenderer({ canvas, bus, settings: { ...save.settings, quality, preserveDrawingBuffer: DEBUG } });
-  const ui = createUI({ root: uiRoot, bus });
   const input = createInput(window);
 
   const audio = await loadAudio();
@@ -68,125 +69,41 @@ async function boot() {
     a.setVolume('music', save.settings.music);
     a.setVolume('sfx', save.settings.sfx);
   });
-  let audioUnlocked = false;
-  const unlockAudio = () => { if (!audioUnlocked) { audioUnlocked = true; safeAudio((a) => a.unlock()); } };
-
-  /** 'menu' (gate) | 'playing' | 'paused' | 'results' */
-  let screen = 'menu';
-  let levelRef = 1;
-  let isOvertime = false;
-  let resultsTimer = 0;
-  let lastResult = null;
-
+  // ---- APP FLOW (owner: UI — src/ui/index.js holds the state machine, menus, HUD, results) ----
   const loop = createLoop({
     dt: TUNABLES.sim.dt,
     maxStepsPerFrame: TUNABLES.sim.maxStepsPerFrame,
     step: () => sim.step(),
-    onFrameStart: handleInput,
+    onFrameStart: (realDt) => ui.frame(realDt),
     render,
   });
+  const ui = createUI({ root: uiRoot, bus, simBus, sim, view, loop, input, audio: safeAudio, canvas, params, debug: DEBUG });
   createFeel({ bus, loop, T: TUNABLES });
-
-  function startLevel(ref) {
-    isOvertime = ref === 'overtime';
-    if (!isOvertime) levelRef = getLevel(ref).id;
-    ui.hideResults();
-    ui.setPaused(false);
-    if (isOvertime) sim.startOvertime(); else sim.loadLevel(levelRef);
-    lastResult = null;
-    resultsTimer = 0;
-    screen = 'playing';
-    loop.setPaused(false);
-    loop.resetAccumulator();
-    return sim.snapshot();
-  }
-
-  function setPaused(p) {
-    if (p && screen === 'playing') {
-      screen = 'paused';
-      loop.setPaused(true);
-      ui.setPaused(true, { onResume: () => setPaused(false), onRestart: () => startLevel(isOvertime ? 'overtime' : levelRef) });
-      bus.emit('game:pause', { paused: true });
-    } else if (!p && screen === 'paused') {
-      screen = 'playing';
-      loop.setPaused(false);
-      ui.setPaused(false);
-      bus.emit('game:pause', { paused: false });
-    }
-  }
-
-  bus.on('shift:end', (r) => {
-    lastResult = r;
-    if (isOvertime) recordOvertime(r.liters);
-    else recordShiftResult(r.levelId, { liters: r.liters, stars: r.stars, levelNumber: r.levelNumber });
-    resultsTimer = 1.8; // let the last splashes land
-  });
-
-  function showResults() {
-    screen = 'results';
-    const nxt = isOvertime ? null : nextLevel(levelRef);
-    ui.showResults(lastResult, {
-      hasNext: !!nxt && lastResult.stars >= 1,
-      onRetry: () => startLevel(isOvertime ? 'overtime' : levelRef),
-      onNext: () => nxt && startLevel(nxt.id),
-    });
-  }
-
-  function handleInput(realDt) {
-    const s = input.poll(realDt);
-    if (s.any) unlockAudio();
-    if (screen === 'playing') {
-      sim.setInput({ rotate: s.rotate, brake: s.brake, slam: s.slam });
-      if (s.pause) setPaused(true);
-      if (s.restart) startLevel(isOvertime ? 'overtime' : levelRef);
-    } else if (screen === 'paused') {
-      if (s.pause) setPaused(false);
-      if (s.restart) startLevel(isOvertime ? 'overtime' : levelRef);
-      sim.setInput({ rotate: 0, brake: false });
-    } else {
-      sim.setInput({ rotate: 0, brake: false });
-    }
-    if (resultsTimer > 0) {
-      resultsTimer -= realDt;
-      if (resultsTimer <= 0 && lastResult && screen === 'playing') showResults();
-    }
-  }
 
   function render(alpha, realDt, simDt) {
     const scale = loop.timeScale;
     view.update(sim.state, alpha, simDt);
-    ui.update(sim.snapshot(), realDt);
-    const a = sim.audioState();
-    safeAudio((au) => au.update(realDt, { screen, fill: a.fill, drumOmega: a.drumOmega, aliveCount: a.aliveCount, sawLoad: a.sawLoad, grinderLoad: a.grinderLoad, timeScale: scale, intensity: a.intensity }));
+    ui.update(realDt);
+    const a = ui.audioState(sim.audioState());
+    safeAudio((au) => au.update(realDt, { screen: ui.audioScreen, fill: a.fill, drumOmega: a.drumOmega, aliveCount: a.aliveCount, sawLoad: a.sawLoad, grinderLoad: a.grinderLoad, timeScale: scale, intensity: a.intensity }));
   }
 
-  // pause + mute on focus loss (not in debug runs: headless browsers blur freely)
-  if (!DEBUG) {
-    window.addEventListener('blur', () => setPaused(true));
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { setPaused(true); safeAudio((a) => a.suspend()); } else safeAudio((a) => a.resume());
-    });
-  }
   window.addEventListener('resize', () => view.resize());
 
-  // initial level behind the gate
+  // boot splash + attract mode (or straight into a shift with ?autostart=N|overtime)
   const auto = params.get('autostart');
-  const firstRef = auto ? (auto === 'overtime' ? 'overtime' : Number(auto) || auto) : Math.min(save.progress.unlocked, 1);
-  if (firstRef === 'overtime') sim.startOvertime(); else sim.loadLevel(firstRef);
-  loop.setPaused(true);
   document.getElementById('boot')?.remove();
-  if (auto) startLevel(firstRef);
-  else ui.showGate(() => { unlockAudio(); startLevel(firstRef); });
+  ui.boot({ autostart: auto ? (auto === 'overtime' ? 'overtime' : Number(auto) || auto) : null });
   loop.start();
 
   if (DEBUG) {
     Object.assign(window.__edc, {
       sim, bus, view, loop, input, ui, audio, TUNABLES,
-      loadLevel: (id) => startLevel(id),
-      startOvertime: () => startLevel('overtime'),
+      loadLevel: (id) => ui.startRun(id),
+      startOvertime: () => ui.startRun('overtime'),
       getState: () => ({
-        screen,
         ...sim.snapshot(),
+        screen: ui.screen,
         fps: Math.round(loop.stats.fps * 10) / 10,
         stepMs: { mean: +loop.stats.stepMsMean.toFixed(3), max: +loop.stats.stepMsMax.toFixed(3), last: +loop.stats.stepMsLast.toFixed(3) },
         timeScale: loop.timeScale,
@@ -201,7 +118,7 @@ async function boot() {
       step: (n = 1, render = true) => { loop.stepNow(n, render); return window.__edc.getState(); },
       setTimeScale: (x) => loop.setTimeScale(x),
       setQuality: (name) => view.setQuality(name),
-      pause: (p = true) => setPaused(p),
+      pause: (p = true) => ui.setPaused(p),
     });
   }
   resolveReady(true);

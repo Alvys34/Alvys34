@@ -141,6 +141,7 @@ export class Music {
     this.int = 0; // smoothed intensity
     this.pf = 1;
     this.live = new Set();
+    this.gpool = {};
     this.nodesLive = 0;
     this.notes = 0;
     this.lastScreen = null;
@@ -304,15 +305,19 @@ export class Music {
     src.buffer = buffer;
     src.playbackRate.value = Math.pow(2, (m - base) / 12);
     src.detune.value = (rnd() * 2 - 1) * (2 + 45 * f * f);
-    const g = ctx.createGain();
+    // pooled per-instrument note gains: only the BufferSource is created per note
+    const pool = this.gpool[inst] || (this.gpool[inst] = []);
+    let g = pool.pop();
+    if (g) g.gain.cancelScheduledValues(0);
+    else { g = ctx.createGain(); g.connect(this.inst[inst]); }
+    g.gain.setValueAtTime(0, ctx.currentTime);
     const rel = inst === 'pad' ? 0.35 : inst === 'bass' ? 0.08 : 0.12;
     if (attack) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + attack); } else g.gain.setValueAtTime(vel, t);
     g.gain.setTargetAtTime(0, t + dur, rel);
     src.connect(g);
-    g.connect(this.inst[inst]);
     if (this.detune) this.detune.connect(src.detune);
     const stopAt = Math.min(t + buffer.duration / src.playbackRate.value + 0.1, t + dur + rel * 6);
-    const rec = { src, g };
+    const rec = { src, g, inst };
     src.onended = () => this.free(rec);
     src.start(t);
     src.stop(stopAt);
@@ -328,8 +333,9 @@ export class Music {
     this.nodesLive -= 2;
     try { if (this.detune) this.detune.disconnect(rec.src.detune); } catch (e) { /* noop */ }
     try { rec.src.disconnect(); } catch (e) { /* noop */ }
-    try { rec.g.disconnect(); } catch (e) { /* noop */ }
     rec.src.onended = null;
+    const pool = this.gpool[rec.inst];
+    if (pool.length < 24) pool.push(rec.g); else { try { rec.g.disconnect(); } catch (e) { /* noop */ } }
   }
 
   sweep(now) {
@@ -339,6 +345,8 @@ export class Music {
   stop() {
     for (const rec of [...this.live]) { try { rec.src.stop(); } catch (e) { /* noop */ } this.free(rec); }
     for (const s of this.srcs) { try { s.stop(); } catch (e) { /* noop */ } }
+    for (const k in this.gpool) for (const g of this.gpool[k]) { try { g.disconnect(); } catch (e) { /* noop */ } }
+    this.gpool = {};
     try { this.out.disconnect(); } catch (e) { /* noop */ }
   }
 }

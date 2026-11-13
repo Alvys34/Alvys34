@@ -111,9 +111,16 @@ export class Loops {
     const w = Math.min(10, Math.abs(Number(st.drumOmega) || 0));
     const wn = clamp(w / 2.2, 0, 1.3);
     const mT = on * (w > 0.01 ? 0.3 + 0.7 * Math.min(1, wn) : 0) * L.motor;
+    const f = (30 + 48 * wn) * pf;
+    if (mT > 0 && this.lastMotor < 0.002 && Number.isFinite(f)) {
+      // first movement from rest: jump straight to an audible level and pitch on this frame
+      for (const [prm, v] of [[this.motorGain.gain, mT * 0.7], [this.mA.frequency, f], [this.mB.frequency, f * 2.01], [this.motorLP.frequency, (160 + 520 * wn) * pf]]) {
+        prm.cancelScheduledValues(now);
+        prm.setValueAtTime(v, now);
+      }
+    }
     set(this.motorGain.gain, mT, mT > this.lastMotor ? 0.01 : 0.12);
     this.lastMotor = mT;
-    const f = (30 + 48 * wn) * pf;
     set(this.mA.frequency, f, 0.02);
     set(this.mB.frequency, f * 2.01, 0.02);
     set(this.mWhine.frequency, f * 9.5, 0.02);

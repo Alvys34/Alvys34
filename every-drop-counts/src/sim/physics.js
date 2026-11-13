@@ -100,7 +100,7 @@ export function makeDyn(kind, body, collider, { mass, radius, thick, owner }) {
 export function readback(dyns) {
   for (let i = 0; i < dyns.length; i++) {
     const d = dyns[i];
-    if (d.removed) continue;
+    if (d.removed || d.encased) continue; // encased parts are posed by their container prop
     d.px = d.x; d.py = d.y; d.pz = d.z;
     d.pqx = d.qx; d.pqy = d.qy; d.pqz = d.qz; d.pqw = d.qw;
     d.pvx = d.vx; d.pvy = d.vy; d.pvz = d.vz;
@@ -135,7 +135,7 @@ export function applyFrameForces(ctx, dt) {
   const frameStill = w === 0 && a === 0;
   for (let i = 0; i < dyns.length; i++) {
     const d = dyns[i];
-    if (d.removed) continue;
+    if (d.removed || d.encased) continue;
     // nothing to add: leave the body alone so resting piles can fall asleep (no jitter, cheaper)
     if (frameStill && d.sub <= 0 && !d.dirty) continue;
     d.dirty = false;
@@ -188,7 +188,7 @@ export function clampAngular(ctx) {
   const max = ctx.T.sim.maxAngSpeed;
   const v3 = { x: 0, y: 0, z: 0 };
   for (const d of ctx.dyns) {
-    if (d.removed) continue;
+    if (d.removed || d.encased) continue;
     const w = d.body.angvel();
     const s2 = w.x * w.x + w.y * w.y + w.z * w.z;
     if (s2 > max * max) {

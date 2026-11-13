@@ -17,8 +17,10 @@ sim.snapshot()               // plain JSON (tests, __edc.getState)
 sim.audioState()             // { fill, drumOmega, aliveCount, sawLoad, grinderLoad, intensity }
 ```
 
-Run a whole shift in Node: `node tools/simbot.mjs --level 2 --policy smart` (policies
-`idle|spin|rock|smart`), tests: `npm test`.
+Run a whole shift in Node: `node tools/simbot.mjs --level 2 --policy smart` (policies in
+`tools/policies.mjs`: idle spin rock tumble slamSpam flipper rockAim park smart), the full matrix:
+`node tools/botmatrix.mjs`, one run's death causes / damage sources: `node tools/simdiag.mjs 3 smart`.
+Tests: `npm test`.
 
 ## Frames and units
 
@@ -123,7 +125,73 @@ and the end condition; it emits `shift:end { result, liters, stars }` exactly on
 
 `shift:start, shift:end, wave:incoming, hatch:open, donor:spawn, donor:hurt (throttled),
 donor:death, limb:sever, limb:break, impact (top 3 per step), blood:spurt, blood:splat (throttled),
-splash, hazard:contact, slam, slam:ready, combo, bonus, fine, pa:announce, timer:warning`.
-Extensions: `donor:speak { id, text, pos }` (speech bubbles), `part:dissolve { id, part, pos }`.
-All payloads also carry `t` (sim time). Not emitted yet (CONTENT): `hazard:telegraph`,
-`grinder:*`, `prop:*`, `sphere:*`; UI emits `ui:*`, main emits `game:pause`.
+splash, hazard:contact, hazard:telegraph, grinder:clog, grinder:clear, slam, slam:ready, combo,
+bonus, fine, prop:puncture, prop:explode, sphere:crack, sphere:shatter, pa:announce, timer:warning`.
+All payloads also carry `t` (sim time); positional ones `pan` + `pos`.
+
+Extensions (documented, safe to ignore): `donor:speak { id, text, pos }` (speech bubbles),
+`part:dissolve { id, part, pos }`, `grinder:swallow { id, part, liters }` (a part went into the
+rollers), `crusher:stroke {}` (every press stroke, even when empty — hydraulic thump).
+UI emits `ui:*`, main emits `game:pause`, `src/core/achievements.js` emits `achievement { id, title }`.
+
+Payload details added by CONTENT:
+* `hazard:contact { hazard: 'saw'|'spike'|'grinder'|'crusher', intensity, pressed? }` — rail saws
+  report `hazard: 'saw'`; crusher presses report `pressed` (donors caught by this stroke so far).
+* `hazard:telegraph { hazard: 'crusher' }` — ~1.1 s before the stroke (light + hiss).
+* `grinder:clog { heldMass }`, `grinder:clear { bySlam }`.
+* `prop:puncture { cause: 'saw'|'spike'|'grinder'|'crusher'|'impact'|'explosion', prop }`,
+  `prop:explode { radius, hits }`.
+* `sphere:crack { hits, maxHits, cause, donorId }`, `sphere:shatter { cause, donorId }`.
+* `fine { liters: 25, reason: 'workplace-incident' }`, `bonus { liters, reason:
+  'sponsor-match'|'early-finish'|'compliance' }`.
+* `shift:end` (shift mode) `{ result: 'complete'|'timeout'|'failed', liters, stars, levelId,
+  levelNumber, name, collected, bonus, fines, kills, drownings, bestCombo, time, timeLeft,
+  donorsTotal, causes, inspectorDeaths, inspectorsSaved, quota, variant: null|'staff',
+  report: { title, lines: [string] },   // deadpan results text (UI shows it)
+  ending: null | { pa, mood, next: 'credits' } }`  // shift 8 only, when passed: play the sting
+* `shift:end` (overtime) `{ result: 'failed', mode: 'overtime', liters, stars: 0, time, waves,
+  kills, drownings, bestCombo, inspectorDeaths, peakDrain, report }` — score = `liters`.
+
+## Snapshot / state fields for CONTENT kinds (read-only; for ART, VFX, AUDIO, UI)
+
+All coordinates drum-local. Hazards: `state.hazards[i].view` (plain object, updated in place),
+`state.hazards[i].load` 0..1. Props: `state.props[i]` (`removed` once gone) with `.view`; props
+with a body expose `view.dyn` = the Dyn (pose `x,y,z,qx..qw`, previous `px..pqw` for interpolation).
+
+| kind | `view` fields |
+|---|---|
+| `spikes` | `wall, from, to, z0, z1, height, n, t, impaled` |
+| `saw` | `wall, x, y, z0, z1, radius, dir, angle, spin, n` |
+| `railSaw` | `wall, n, t, from, to, offset, railA:[x,y], railB:[x,y], x, y` (current blade centre)`, z0, z1, radius, dir, angle, spin, u` (0..1 along the rail)`, vel` (m/s along t) |
+| `grinder` | `wall, n, t, at, width, housing, z0, z1, x, y` (roller-face centre)`, angle` (rollers counter-rotate ±angle)`, clogged, held, heldMass, chewing, boost` (0..1 after a slam-clear) |
+| `crusher` | `wall, n, t, at, width, plate, z0, z1, span, reach, x, y` (base on the wall)`, ext` (plate-face distance from the wall)`, state` ('idle'/'telegraph'/'extend'/'hold'/'retract')`, warn` (0..1 telegraph progress)`, cycle` |
+| prop `oxygenTank` | `dyn, radius, halfLength` (capsule along local +y, nozzle at −y)`, state` ('intact'/'punctured'/'exploded')`, fuse, thrust` (0..1 exhaust) |
+| prop `safetySphere` | `dyn, radius, hits, maxHits, cracks` (0..1)`, shattered, donorId` |
+
+Audio: `sim.audioState().grinderLoad` = max grinder `load` (0 idle, ~0.4–1 chewing, 1 jammed);
+`sawLoad` includes rail saws.
+
+Donors (`state.donors[i]`): `type` ('standard'|'bigGiver'|'thinBlood'|'inspector'), `alive`,
+`mustSurvive` (Inspector), `encased` (inside his sphere: his parts are posed by the sphere and
+have `part.encased = true`; draw him normally), `sphere` (the prop or null), `look = { gown, skin,
+accessory: null|'wristband'|'hardhat', outfit: 'gown'|'suit'|'staff', scale }`. Big Givers use a
+1.3× scaled body plan (part shapes are scaled; `look.scale` = 1.3). Part: `opened` (has an open,
+bleeding wound — blunt bruises are not), `grinding` (held by a grinder).
+
+`sim.snapshot()` adds: `props: [{id, type, state, hits}]`, `inspectors: [{id, alive, encased,
+hits}]`, `aliveTargets` (alive donors that are product, i.e. not Inspectors), `overtime: null |
+{ tank, tankMax, drainRate, wave, nextWaveIn, demandLevel, drained }`, `blood: { pending,
+dissolved }`. `donorsLeft` excludes Inspectors.
+
+Levels (`listLevels()`): `{ id, number, name, subtitle, lesson, quota, duration, variant }`.
+Shift 8 has `variant: 'staff'` (donor outfits) and `ending`.
+
+## Damage & yield model (CONTENT balance pass)
+
+Wounds open at a rate per hp that depends on the damage KIND (`T.damage.wound`): cut / pierce /
+grind / explode / press open real wounds; blunt (wall impacts, falls on bare metal) and crush
+(piles) barely bleed. Open wounds CLOT (`woundClot` 1/s), stumps clot slowly (`stumpClot`), impaled
+parts never clot while pinned, Thin-Bloods never clot. Death releases `deathBurst` from OPEN wounds
+only. So a donor beaten to death against bare walls yields almost nothing; a donor routed into the
+machinery yields most of their blood; the grinder converts 100 %. Sponsor Match only counts
+`T.scoring.comboCauses` (not 'impact', not 'drown'); Inspectors never count.

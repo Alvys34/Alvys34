@@ -9,7 +9,7 @@
 export function createScoring(ctx) {
   const S = ctx.T.scoring;
   const sc = {
-    bonus: 0, fines: 0, kills: 0, drownings: 0, deaths: 0,
+    bonus: 0, fines: 0, kills: 0, drownings: 0, deaths: 0, inspectorDeaths: 0, inspectorsSaved: 0,
     combo: { count: 0, multiplier: 1, timer: 0, best: 0 },
     killTimes: [],
     causes: {},
@@ -27,9 +27,13 @@ export function createScoring(ctx) {
     onDeath(c, donor, cause) {
       sc.deaths++;
       sc.causes[cause] = (sc.causes[cause] || 0) + 1;
+      if (donor.def.mustSurvive) return; // Inspectors: fines, never kills/combos
       if (cause === 'drown') { sc.drownings++; return; }
       sc.kills++;
       sc.killTimes.push(c.time);
+      // Sponsor Match only counts PROCESSED donors: a donor bruised to death against bare metal
+      // ('impact') does not keep the chain going (CONTENT balance: no reward for wall-slamming).
+      if (S.comboCauses && !S.comboCauses.includes(cause)) return;
       if (sc.combo.timer > 0) sc.combo.count++; else sc.combo.count = 1;
       sc.combo.timer = S.comboWindow;
       const mult = Math.min(S.comboMax, sc.combo.count);

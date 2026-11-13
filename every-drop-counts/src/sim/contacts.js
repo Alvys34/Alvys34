@@ -27,6 +27,8 @@ export function processContacts(ctx, dt) {
     const n = ev.maxForceDirection(dirTmp);
     const v1 = velOf(o1); const v2 = velOf(o2);
     const approach = Math.abs((v1[0] - v2[0]) * n.x + (v1[1] - v2[1]) * n.y + (v1[2] - v2[2]) * n.z);
+    if (o1.kind === 'prop' && o1.prop.onContact && !o1.prop.removed) o1.prop.onContact(ctx, o2, approach, F, o1.dyn);
+    if (o2.kind === 'prop' && o2.prop.onContact && !o2.prop.removed) o2.prop.onContact(ctx, o1, approach, F, o2.dyn);
     handleSide(ctx, o1, o2, F, approach, dt, impacts, D);
     handleSide(ctx, o2, o1, F, approach, dt, impacts, D);
   });
@@ -63,9 +65,15 @@ function handleSide(ctx, self, other, F, speed, dt, impacts, D) {
   if (speed >= D.impactEventMinDv && (other.kind !== 'part' || self.part.uid < other.part.uid)) {
     impacts.push({ kind, speed, mass: part.mass, pos: [part.x, part.y, part.z] });
   }
+  // Big Givers landing on someone press them (an open, bleeding injury — they are a weapon)
+  const crushBonus = other.kind === 'part' ? other.part.donor.def.crushBonus : 0;
+  if (crushBonus && speed > 5 && !part.donor.def.crushBonus) {
+    damagePart(ctx, part, (speed - 5) * 8 * crushBonus, 'press', 'crush');
+  }
   if (speed > D.impactMinDv) {
     let dmg = (speed - D.impactMinDv) * D.impactScale;
     if (other.kind === 'part') dmg *= Math.min(2.5, Math.sqrt(other.part.mass / D.impactMassRef));
+    else if (other.kind === 'prop' && other.dyn) dmg *= Math.min(2.5, Math.sqrt(other.dyn.mass / D.impactMassRef));
     if (part.role === 'head') dmg *= 1.3;
     damagePart(ctx, part, dmg, 'blunt', 'impact');
   } else if (F > D.crushForce) {

@@ -85,7 +85,7 @@ export function trySlam(ctx) {
   const ux = drum.ux; const uy = drum.uy;
   const rng = ctx.rng;
   for (const d of ctx.dyns) {
-    if (d.removed) continue;
+    if (d.removed || d.encased) continue;
     const dv = S.deltaV * d.slamScale;
     addVelocity(d, ux * dv, uy * dv, 0);
     if (S.angularJolt > 0) {

@@ -1,0 +1,80 @@
+[
+ {
+  "eval": "(window.__edc.setTimeScale(0), window.__edc.loop.stop(), 1)"
+ },
+ {
+  "level": 2
+ },
+ {
+  "step": 240
+ },
+ {
+  "shot": "a01-start"
+ },
+ {
+  "input": {
+   "rotate": -1
+  }
+ },
+ {
+  "step": 40
+ },
+ {
+  "input": {
+   "rotate": 0
+  }
+ },
+ {
+  "step": 50
+ },
+ {
+  "shot": "a02-saw"
+ },
+ {
+  "step": 6
+ },
+ {
+  "shot": "a03-saw-b"
+ },
+ {
+  "rock": {
+   "steps": 900,
+   "period": 80,
+   "slamEvery": 150
+  }
+ },
+ {
+  "shot": "a04-mid"
+ },
+ {
+  "rock": {
+   "steps": 1500,
+   "period": 80,
+   "slamEvery": 150
+  }
+ },
+ {
+  "shot": "a05-late"
+ },
+ {
+  "input": {
+   "rotate": 0,
+   "slam": true
+  }
+ },
+ {
+  "step": 6
+ },
+ {
+  "shot": "a06-slam"
+ },
+ {
+  "step": 30
+ },
+ {
+  "shot": "a07-after"
+ },
+ {
+  "eval": "JSON.stringify(window.__edc.view.perf())"
+ }
+]

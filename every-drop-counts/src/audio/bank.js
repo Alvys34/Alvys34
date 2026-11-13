@@ -9,6 +9,10 @@ import { INSTRUMENTS } from './sounds/instruments.js';
 
 export const DEFS = { ...GORE, ...MACHINES, ...LOOPS, ...VOICE, ...UI, ...INSTRUMENTS };
 
+// Content is band-limited well below 11 kHz: render these at half the context rate.
+for (const k of ['thud', 'slam', 'grinderClog', 'grinderClear', 'motorStart', 'hatch', 'vSpawn', 'vHurt', 'vDeath', 'vDrown', 'vSigh',
+  'paSpeech', 'paSpeechGlitch', 'mi_bass', 'mi_pad', 'mi_ep', 'md_kick', 'md_conga', 'lpGrind', 'lpAlarm', 'buzzer', 'jingleFailed']) if (DEFS[k]) DEFS[k].half = true;
+
 const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
 function hashStr(s) {
@@ -69,6 +73,10 @@ export class Bank {
     let v = Math.floor(this.rnd() * n);
     const last = this.last.get(name);
     if (n > 1 && v === last) v = (v + 1 + Math.floor(this.rnd() * (n - 1))) % n;
+    if (!this.cache.has(name + '#' + v)) {
+      // not rendered yet: prefer any rendered variant over a synchronous render on this frame
+      for (let k = 1; k < n; k++) { const w = (v + k) % n; if (w !== last && this.cache.has(name + '#' + w)) { v = w; break; } }
+    }
     this.last.set(name, v);
     return this.get(name, v);
   }
@@ -78,12 +86,14 @@ export class Bank {
     if (!def) return null;
     const t0 = nowMs();
     const rnd = makeRng((hashStr(name) ^ Math.imul(v + 1, 0x9e3779b1) ^ this.seed) >>> 0);
-    let data = def.render(this.sr, rnd, v);
+    // band-limited sounds render at half rate (cheaper; WebAudio resamples on playback)
+    const sr = def.half ? Math.round(this.sr / 2) : this.sr;
+    let data = def.render(sr, rnd, v);
     // Never let a NaN/Inf into the graph: it would poison downstream filters permanently.
     for (let i = 0; i < data.length; i++) if (!Number.isFinite(data[i])) data[i] = 0;
     if (/^(mi_|md_|lp)/.test(name) || def.norm === 'peak') normalize(data, def.peak ?? 0.9);
-    else loudnessNormalize(data, this.sr);
-    const b = this.ctx.createBuffer(1, data.length, this.sr);
+    else loudnessNormalize(data, sr);
+    const b = this.ctx.createBuffer(1, data.length, sr);
     if (b.copyToChannel) b.copyToChannel(data, 0); else b.getChannelData(0).set(data);
     this.cache.set(name + '#' + v, b);
     const ms = nowMs() - t0;

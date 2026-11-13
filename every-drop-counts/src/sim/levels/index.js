@@ -4,6 +4,12 @@
  */
 import shift1 from './shift1.js';
 import shift2 from './shift2.js';
+import shift3 from './shift3.js';
+import shift4 from './shift4.js';
+import shift5 from './shift5.js';
+import shift6 from './shift6.js';
+import shift7 from './shift7.js';
+import shift8 from './shift8.js';
 
 export const LEVELS = [];
 
@@ -23,7 +29,12 @@ export function getLevel(idOrNumber) {
   return lvl;
 }
 
-export function listLevels() { return LEVELS.map((l) => ({ id: l.id, number: l.number, name: l.name, quota: l.quota })); }
+export function listLevels() {
+  return LEVELS.map((l) => ({
+    id: l.id, number: l.number, name: l.name, subtitle: l.subtitle || '', lesson: l.lesson || '',
+    quota: l.quota, duration: l.duration, variant: l.variant || null,
+  }));
+}
 
 export function nextLevel(idOrNumber) {
   const cur = getLevel(idOrNumber);
@@ -38,3 +49,9 @@ function validateLevel(l) {
 
 registerLevel(shift1);
 registerLevel(shift2);
+registerLevel(shift3);
+registerLevel(shift4);
+registerLevel(shift5);
+registerLevel(shift6);
+registerLevel(shift7);
+registerLevel(shift8);

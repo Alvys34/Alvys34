@@ -20,6 +20,9 @@
  */
 import spikes from './spikes.js';
 import saw from './saw.js';
+import railSaw from './railSaw.js';
+import grinder from './grinder.js';
+import crusher from './crusher.js';
 
 export const HAZARD_TYPES = Object.create(null);
 
@@ -42,3 +45,6 @@ export function createHazard(ctx, spec, id) {
 
 registerHazard(spikes);
 registerHazard(saw);
+registerHazard(railSaw);
+registerHazard(grinder);
+registerHazard(crusher);

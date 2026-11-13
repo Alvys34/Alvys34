@@ -43,26 +43,36 @@ export function sing(sr, rnd, spec) {
   const breathPts = typeof spec.breath === 'number' ? [[0, spec.breath]] : spec.breath || [[0, 0.06]];
   let ph = rnd();
   let g = 1, jitter = 0;
+  // control-rate (every 32 samples) envelopes with linear ramps in between
+  const CR = 32;
+  let f0a = bp(spec.f0, 0), f0b = f0a, ama = bp(spec.amp, 0), amb = ama, bra = bp(breathPts, 0), brb = bra;
+  const vibK = TAU * vibRate;
   for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    if ((i & 31) === 0) {
+    const j = i & (CR - 1);
+    if (j === 0) {
+      const t = i / sr, t2 = (i + CR) / sr;
       const V = vowelAt(spec.v, t);
       f1.set('bp', V[0] * fs, 6, sr);
       f2.set('bp', V[1] * fs, 9, sr);
       f3.set('bp', V[2] * fs, 12, sr);
       g = V[3];
       jitter = (rnd() * 2 - 1) * 0.006;
+      f0a = bp(spec.f0, t); f0b = bp(spec.f0, t2);
+      ama = bp(spec.amp, t); amb = bp(spec.amp, t2);
+      bra = bp(breathPts, t); brb = bp(breathPts, t2);
     }
-    const f0 = bp(spec.f0, t) * (1 + vib * Math.sin(TAU * vibRate * t) + jitter);
+    const u = j / CR;
+    const t = i / sr;
+    const f0 = (f0a + (f0b - f0a) * u) * (1 + vib * Math.sin(vibK * t) + jitter);
     const dt = f0 / sr;
     ph += dt; if (ph >= 1) ph -= 1;
     const saw = 2 * ph - 1 - polyBlep(ph, dt);
-    const br = bp(breathPts, t);
+    const br = bra + (brb - bra) * u;
     const voiced = tilt.run(saw) * g;
     const src = voiced * (1 - br) * 2.2 + (rnd() * 2 - 1) * br;
     let y = f1.run(src) * 1.0 + f2.run(src) * 0.55 + f3.run(src) * 0.25;
     if (spec.trill) y *= 0.55 + 0.45 * Math.sin(TAU * spec.trill * t);
-    out[i] = y * bp(spec.amp, t);
+    out[i] = y * (ama + (amb - ama) * u);
   }
   if (spec.muffle) { filter(out, sr, 'lp', spec.muffle, 0.6); filter(out, sr, 'lp', spec.muffle * 1.4, 0.6); }
   return fade(dcBlock(out, sr, 70), sr, 0.003, 0.03);

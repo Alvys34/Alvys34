@@ -9,6 +9,8 @@
  *   collected,          // L released from donors so far (credited to score + pool)
  *   donorTotal,         // L of blood ever spawned inside donors (conservation bound)
  *   dissolved,          // L lost with parts removed un-bled (dissolve / debris cap): never scored
+ *   pending,            // L swallowed by a grinder, not yet converted (conservation: collected +
+ *                       //   dissolved + pending + still-in-bodies == donorTotal)
  *   rate,               // L/s released over the last step (audio/VFX intensity)
  *   bleeders: [],       // up to MAX_BLEEDERS active sources for VFX: {x,y,z,dx,dy,dz,rate,part}
  * }
@@ -16,7 +18,7 @@
 const MAX_BLEEDERS = 48;
 
 export function createBloodState() {
-  return { collected: 0, donorTotal: 0, dissolved: 0, rate: 0, bleeders: [], splatTimer: 0, splatAcc: 0, released: 0 };
+  return { collected: 0, donorTotal: 0, dissolved: 0, pending: 0, rate: 0, bleeders: [], splatTimer: 0, splatAcc: 0, released: 0 };
 }
 
 /** Release `liters` from a part (or from nowhere when part is null). Returns amount released. */
@@ -51,11 +53,15 @@ export function stepBleeding(ctx, dt) {
   for (const part of ctx.parts) {
     if (part.removed || part.wound <= 0 || part.blood <= 0) continue;
     const donor = part.donor;
+    // bruises (blunt/crush only, never opened) stop when the heart does
+    if (!donor.alive && !part.opened) { part.wound = 0; continue; }
     let rate = part.wound * donor.def.bleedScale * part.bloodMax; // L/s
     if (!donor.alive) rate *= D.deadBleedFactor;
     if (part.wound < D.bleedMinRate) { part.wound = 0; continue; }
     const got = releaseBlood(ctx, part, rate * dt);
-    if (D.woundClot > 0) part.wound = Math.max(0, part.wound - D.woundClot * dt);
+    // clotting: impaled parts stay open while pinned, stumps close slowly, Thin-Bloods never clot
+    const clot = part.impaled ? 0 : (part.stumps.length ? D.stumpClot : D.woundClot) * (donor.def.clotScale ?? 1);
+    if (clot > 0) part.wound *= Math.exp(-clot * dt);
     if (got > 0 && B.bleeders.length < MAX_BLEEDERS) {
       // source: a stump if there is one (spray along the stump axis), else the part centre
       let sx = part.x; let sy = part.y; let sz = part.z; let dx = 0; let dy = 0; let dz = 0;

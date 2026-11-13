@@ -34,7 +34,7 @@ export function stepPool(ctx, dt) {
   for (const d of ctx.dyns) {
     if (d.removed) continue;
     d.prevSub = d.sub;
-    if (!hasPool) { d.sub = 0; d.subTime = 0; continue; }
+    if (!hasPool || d.encased) { d.sub = 0; d.subTime = 0; continue; }
     const wy = ux * d.x + uy * d.y; // world height of the centre
     const r = Math.max(0.08, d.thick * 1.4);
     const depth = s - wy;

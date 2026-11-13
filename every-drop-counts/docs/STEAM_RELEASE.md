@@ -176,7 +176,25 @@ instability, set `EDC_STEAM_OVERLAY=0` in the launch options' environment
 
 | API name | Display name | Description | Hidden |
 |---|---|---|---|
-| _TBD_ | _TBD_ | _TBD_ | |
+| `FIRST_SHIFT` | Orientation Complete | Pass Shift 1. |  |
+| `ALL_SHIFTS` | Staff Appreciated | Pass Shift 8: Staff Appreciation Day. |  |
+| `PERFECT_RECORD` | Operator of Every Month | Earn 3 drops on all 8 shifts. |  |
+| `OVERTIME_5_MIN` | Voluntary Overtime | Keep the tank from running dry for 5 minutes in Overtime. |  |
+| `SPONSOR_MATCH_8` | Fully Matched | Reach a ×8 Sponsor Match. |  |
+| `HEAD_ABOVE_WATER` | Head Above Water | Pass High Tide (Shift 3) without a single drowning. |  |
+| `FULLY_COMPLIANT` | Fully Compliant | Earn 3 drops on a shift with every Inspector still alive. |  |
+| `SINGLE_STROKE` | Single Stroke | Press 3 donors with one stroke of the crusher. |  |
+| `PERCUSSIVE_MAINTENANCE` | Percussive Maintenance | Jam The Good Machine, then SLAM it clear. |  |
+| `PRESSURE_EVENT` | Pressure Event | Set off an oxygen tank with another oxygen tank. |  |
+| `SOME_ASSEMBLY_REQUIRED` | Some Assembly Required | Collect 30 partial donations in one shift. |  |
+| `INCIDENT_REPORT` | Incident Report | An Inspector met an oxygen tank. | yes |
+| `PRODUCT_NOT_RECOVERABLE` | Product Not Recoverable | Let 5 donors drown in one shift. | yes |
+| `CONSCIENTIOUS_OBJECTOR` | Conscientious Objector | Finish a shift without processing a single donor. | yes |
+
+Source of truth: `src/core/achievements.js` (`ACHIEVEMENTS`). The tracker there listens to the
+sim's bus and emits `achievement { id }` once per unlock; the UI saves it and forwards the id to
+`edcDesktop.unlockAchievement`. Create each entry in Steamworks with exactly these API names
+(14 achievements; the hidden ones should be marked "Hidden" so their description stays secret).
 
 ## 6. Store page and content
 

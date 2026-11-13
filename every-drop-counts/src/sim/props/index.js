@@ -32,3 +32,9 @@ export function createProp(ctx, spec, id) {
   inst.removed = false;
   return inst;
 }
+
+import oxygenTank from './oxygenTank.js';
+import safetySphere from './safetySphere.js';
+
+registerProp(oxygenTank);
+registerProp(safetySphere);

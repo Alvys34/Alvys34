@@ -120,7 +120,7 @@ export async function renderScenario(sc, keepBuffer = false) {
   // render every buffer the scenario needs up front so timing is not skewed
   eng.bank.warm(10000);
   if (sc.dry && eng.conv) eng.conv.disconnect();
-  const frame = 512 / SR;
+  const frame = (sc.frame || 512) / SR;
   let st = baseState(sc.state);
   const evs = (sc.events || []).slice().sort((a, b) => a[0] - b[0]);
   const plays = (sc.plays || []).slice();
@@ -171,7 +171,7 @@ export async function measureRaw(nVar = 3) {
     const rs = [];
     const v0 = (o && o.v) || 0;
     // start at 0.5 s: WebAudio compressors start from a gain-reduced state and need ~0.3 s to settle
-    for (let k = 0; k < nVar; k++) rs.push(strip(await renderScenario({ dur: 3.7, from: 0.45, dry: true, plays: [[0.5, cls, name, { pitch: 0, ...o, v: v0 + k }]] })));
+    for (let k = 0; k < nVar; k++) rs.push(strip(await renderScenario({ dur: 3.7, from: 0.45, dry: true, frame: 2048, plays: [[0.5, cls, name, { pitch: 0, ...o, v: v0 + k }]] })));
     const avg = (key) => +(rs.reduce((a, r) => a + r[key], 0) / rs.length).toFixed(key === 'flatness' ? 3 : 1);
     const r = { ...rs[0] };
     for (const key of ['peakDb', 'momDb', 'rmsDb', 'durMs', 'centroidHz', 'lowPct', 'midPct', 'highPct', 'flatness']) r[key] = avg(key);
@@ -232,7 +232,7 @@ export async function measureEvents() {
   for (const [label, payload, type, primers] of EVENT_CASES) {
     // primers: events emitted many times beforehand so the adaptive normalisers settle (offline at t=0, then measured event at t=0.6)
     void primers;
-    const r = await renderScenario({ dur: 4, events: [[0.6, type || label, payload]], from: 0.55 });
+    const r = await renderScenario({ dur: 4, frame: 1024, events: [[0.6, type || label, payload]], from: 0.55 });
     out.push({ id: label, ...strip(r) });
   }
   return out;
@@ -267,15 +267,24 @@ export async function measureLoops() {
 
 /** Motor onset latency: omega steps from 0 to 0.5 at t=1 s; time until output reaches 50% of steady RMS. */
 export async function motorLatency() {
-  const r = await renderScenario({ dur: 2.2, state: { screen: 'playing' }, stateAt: (t) => ({ drumOmega: t >= 1 ? 0.5 : 0 }) }, true);
-  // time from the state change until the output first exceeds 25 % of the steady-state peak
-  const d = r.buffer.getChannelData(0);
-  let steady = 0; for (let i = Math.floor(1.7 * SR); i < Math.floor(2.1 * SR); i++) steady = Math.max(steady, Math.abs(d[i]));
-  let base = 0; for (let i = Math.floor(0.5 * SR); i < Math.floor(0.99 * SR); i++) base = Math.max(base, Math.abs(d[i]));
-  let lat = null;
-  const t0 = Math.floor(1.0 * SR);
-  for (let i = t0; i < Math.floor(1.5 * SR); i++) if (Math.abs(d[i]) > steady * 0.25) { lat = +(((i - t0) / SR) * 1000).toFixed(1); break; }
-  return { latencyMs: lat, steadyPeakDb: +db(steady).toFixed(1), beforeDb: +db(base).toFixed(1), note: 'measured from the frame in which state.drumOmega changed (includes the motor-start relay transient)' };
+  // Onset = first sample 12 dB above the pre-change floor. Measured relative to a reference voice
+  // started in the same frame, which cancels the offline suspend/resume scheduling delay.
+  const onset = (buf) => {
+    const d = buf.getChannelData(0);
+    let base = 0; for (let i = Math.floor(0.5 * SR); i < Math.floor(0.99 * SR); i++) base = Math.max(base, Math.abs(d[i]));
+    for (let i = Math.floor(1.0 * SR); i < Math.floor(1.5 * SR); i++) if (Math.abs(d[i]) > Math.max(base * 4, 1e-4)) return i / SR;
+    return null;
+  };
+  const mot = await renderScenario({ dur: 2.2, state: { screen: 'playing' }, stateAt: (t) => ({ drumOmega: t >= 1 ? 0.5 : 0 }) }, true);
+  const ref = await renderScenario({ dur: 1.5, state: { screen: 'playing' }, plays: [[1.0, 'machine', 'slam', { v: 0 }]] }, true);
+  const a = onset(mot.buffer), b = onset(ref.buffer);
+  // half level of the motor body (50 ms RMS) relative to steady state
+  const d = mot.buffer.getChannelData(0), w = Math.floor(0.05 * SR);
+  const rms = (i) => { let q = 0; for (let k = 0; k < w; k++) q += d[i + k] * d[i + k]; return Math.sqrt(q / w); };
+  const steady = rms(Math.floor(1.8 * SR));
+  let half = null;
+  for (let i = Math.floor(b * SR); i < Math.floor(1.6 * SR); i += Math.floor(SR * 0.002)) if (rms(i) > steady * 0.5) { half = +(((i / SR) - b) * 1000 + 50).toFixed(1); break; }
+  return { latencyMs: a != null && b != null ? +((a - b) * 1000).toFixed(1) : null, halfLevelMs: half, harnessDelayMs: b != null ? +((b - 1) * 1000).toFixed(1) : null, note: 'relative to a voice started in the same frame; halfLevelMs is the end of the first 50 ms RMS window at half steady level' };
 }
 
 export async function measureMusic() {

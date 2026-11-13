@@ -110,7 +110,8 @@ try {
     const lat = await page.evaluate(() => window.__audioHarness.motorLatency());
     report.motorLatency = lat;
     console.log('motor onset latency:', lat, '\n');
-    check(lat.latencyMs != null && lat.latencyMs <= 20, `motor should respond within 20 ms of the state change (got ${lat.latencyMs})`);
+    check(lat.latencyMs != null && lat.latencyMs <= 5, `motor should be audible within 5 ms of the state change (got ${lat.latencyMs})`);
+    check(lat.halfLevelMs != null && lat.halfLevelMs <= 60, `motor body should reach half level within 60 ms (50 ms window) (got ${lat.halfLevelMs})`);
   }
 
   if (only.includes('music')) {
@@ -169,7 +170,7 @@ try {
       console.log('AudioHandlers (live WebAudio nodes, Chrome counter) every 2 s:', handlers.map((h) => `${h.t}:${h.audioHandlers}`).join(' '));
       console.log('JS heap MB:', handlers.map((h) => h.heapMB).join(' '));
       console.log({ totalEvents: st.totalEvents, emitMeanUs: st.emitMeanUs, emitMaxMs: st.emitMaxMs, updateMeanMs: st.updateMeanMs, updateMaxMs: st.updateMaxMs, frameMaxMs: st.frameMaxMs, ctxState: st.ctxState, ctxTime: st.ctxTime, wallTime: st.wallTime });
-      console.log('voice stats:', st.stats.voiceStats, 'bank:', { rendered: st.stats.bankRendered, totalRenderMs: Math.round(st.stats.bankRenderMs), maxRenderMs: +st.stats.bankMaxRenderMs.toFixed(1) });
+      console.log('voice stats:', JSON.stringify(st.stats.voiceStats), 'bank:', { rendered: st.stats.bankRendered, totalRenderMs: Math.round(st.stats.bankRenderMs), maxRenderMs: +st.stats.bankMaxRenderMs.toFixed(1) });
       console.log('after tails:', { voices: st.after.voices, dying: st.after.dying, voiceNodes: st.after.voiceNodes, musicNodes: st.after.musicNodes }, 'after dispose:', { voiceNodes: st.afterDispose.voiceNodes, musicNodes: st.afterDispose.musicNodes });
       console.log('');
       check(st.stats.errors === 0, 'stress: internal errors ' + st.stats.errorLog.join('; '));
@@ -183,9 +184,13 @@ try {
       check(st.updateMeanMs < 1.0, `stress: mean update cost too high (${st.updateMeanMs} ms)`);
       check(st.after.voiceNodes === 0 || st.after.voices <= 6, 'stress: voices not cleaned up after tails');
       check(st.afterDispose.voiceNodes === 0 && st.afterDispose.musicNodes === 0, 'stress: nodes left after dispose');
+      // Chrome counts finished nodes until JS GC collects them; a leak shows up as a high count after a forced GC.
       const h = handlers.filter((x) => typeof x.audioHandlers === 'number');
-      const mid = h.slice(Math.floor(h.length / 3)).map((x) => x.audioHandlers);
-      check(Math.max(...mid) < 800, `stress: AudioHandlers too high (${Math.max(...mid)})`);
+      const afterGc = h[h.length - 1].audioHandlers;
+      report.audioHandlersPeak = Math.max(...h.map((x) => x.audioHandlers));
+      console.log('AudioHandlers peak between GCs:', report.audioHandlersPeak, 'after dispose + forced GC:', afterGc);
+      check(afterGc < 150, `stress: WebAudio nodes not collected after dispose+GC (${afterGc})`);
+      check(Math.max(...h.map((x) => x.heapMB)) < 64, 'stress: JS heap grew beyond 64 MB');
     }
   }
 

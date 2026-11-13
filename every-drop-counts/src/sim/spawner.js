@@ -18,6 +18,8 @@ export function createSpawner(ctx, hatch) {
   const sp = {
     hatch: { wall: hatch.wall || 'ceiling', at: hatch.at || 0, x: hatch.x || 0, y: hatch.y || 0, offset: hatch.offset ?? 1.1, open: 0 },
     get pending() { return queue.length; },
+    /** queued donors that are product (not Inspectors) */
+    get pendingTargets() { return queue.filter((q) => q.kind === 'donor' && q.type !== 'inspector').length; },
     /** Queue a wave: returns number of entities queued. */
     openWave(wave) {
       const list = expandTypes(ctx, wave);

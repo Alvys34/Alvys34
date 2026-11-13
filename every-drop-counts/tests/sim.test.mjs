@@ -54,13 +54,13 @@ test('full shift 2 (rock): contract events + pan, blood conservation', async () 
     let inBodies = 0;
     for (const d of c.donors) for (const p of d.partList) { inBodies += p.blood; if (p.blood < -1e-9) violations++; }
     // every litre is accounted for: released (collected) + dissolved + still inside donors
-    if (Math.abs(B.collected + B.dissolved + inBodies - B.donorTotal) > 1e-6 * Math.max(1, B.donorTotal)) violations++;
+    if (Math.abs(B.collected + B.dissolved + B.pending + inBodies - B.donorTotal) > 1e-6 * Math.max(1, B.donorTotal)) violations++;
     if (B.collected > B.donorTotal + 1e-9) violations++;
   });
   assert.equal(violations, 0);
   const snap = sim.snapshot();
   assert.ok(snap.collected <= snap.donorBloodTotal + 1e-6);
-  assert.ok(snap.liters <= snap.collected + snap.bonus + 0.06, 'liters <= collected + bonuses (result rounded to 0.1)');
+  assert.ok(Math.abs(snap.liters - (snap.collected + snap.bonus - snap.fines)) <= 0.06, 'liters = collected + bonuses - fines (result rounded to 0.1)');
   assert.ok(snap.collected > 0);
   assert.equal(sim.state.status, 'ended');
   const types = new Set(events.map((e) => e.type));
@@ -72,7 +72,7 @@ test('full shift 2 (rock): contract events + pan, blood conservation', async () 
     if (e.type === 'donor:death') assert.ok(['cut', 'impale', 'crush', 'grind', 'impact', 'drown', 'explode', 'bleedout'].includes(e.payload.cause));
   }
   // every contract-named event we emit uses a contract name or a documented extension
-  const extensions = new Set(['donor:speak', 'part:dissolve']);
+  const extensions = new Set(['donor:speak', 'part:dissolve', 'grinder:swallow', 'crusher:stroke']);
   for (const t of types) assert.ok(CONTRACT_EVENTS.has(t) || extensions.has(t), `unexpected event type ${t}`);
   sim.dispose();
 });

@@ -77,7 +77,7 @@ export function makeHandlers(eng) {
       lastHurt.set(key, t);
       if (lastHurt.size > 400) lastHurt.clear();
       const n = A.amount.norm(p.amount);
-      P('vocal', 'vHurt', { gain: 0.4 + 0.45 * n, pan: p.pan, rate: voiceRate(p.type, p.id), pitch: 0.5 });
+      P('vocal', 'vHurt', { gain: 0.55 + 0.45 * n, pan: p.pan, rate: voiceRate(p.type, p.id), pitch: 0.5 });
     },
     'donor:death'(p) {
       const t = now();
@@ -94,7 +94,7 @@ export function makeHandlers(eng) {
           P('splash', 'splash', { gain: 0.3, pan, rate: 1.3 });
           break;
         case 'bleedout':
-          P('vocal', 'vSigh', { gain: 0.45, pan, rate, pitch: 0.3 });
+          P('vocal', 'vSigh', { gain: 0.8, pan, rate, pitch: 0.3 });
           P('splat', 'splatBig', { gain: 0.5, pan });
           break;
         case 'explode':
@@ -165,7 +165,7 @@ export function makeHandlers(eng) {
     },
     splash(p) {
       const n = A.splash.norm(p.size);
-      P('splash', 'splash', { gain: 0.25 + 0.75 * n, pan: p.pan, rate: 1.2 - 0.4 * n });
+      P('splash', 'splash', { gain: 0.4 + 0.6 * n, pan: p.pan, rate: 1.2 - 0.4 * n });
     },
     'hazard:contact'(p) {
       const n = A.intensity.norm(p.intensity);

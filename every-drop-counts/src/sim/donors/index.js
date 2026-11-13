@@ -19,6 +19,7 @@
  * }
  */
 import { HUMANOID } from './humanoid.js';
+import { BIG_GIVER, THIN_BLOOD, INSPECTOR } from './types.js';
 
 export const DONOR_TYPES = Object.create(null);
 
@@ -52,3 +53,7 @@ registerDonorType({
     'I feel lighter already!', 'Is that a saw?', 'Lovely tiles.', 'I donate every year!',
   ],
 });
+
+registerDonorType(BIG_GIVER);
+registerDonorType(THIN_BLOOD);
+registerDonorType(INSPECTOR);

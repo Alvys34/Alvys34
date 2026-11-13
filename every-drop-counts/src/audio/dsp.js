@@ -112,21 +112,36 @@ export function addMode(out, sr, t0, f, decay, amp, o = {}) {
   const start = Math.floor(t0 * sr);
   const n = out.length;
   const len = Math.min(Math.ceil(decay * 7 * sr), o.wrap ? n : n - start);
+  if (len <= 0 || f >= sr * 0.49) return;
   const fEnd = o.fEnd ?? f;
-  const chirp = o.chirp ?? decay;
   const att = Math.max(1, Math.floor((o.attack ?? 0.0005) * sr));
-  let ph = o.phase ?? 0;
   const k = Math.exp(-1 / (decay * sr));
   let a = amp;
-  const ratio = fEnd / f;
+  if (fEnd === f) {
+    // constant pitch: complex rotation recurrence (no per-sample trig)
+    const w = (TAU * f) / sr, c = Math.cos(w), sn = Math.sin(w);
+    const ph = o.phase ?? 0;
+    let x = Math.cos(ph), y = Math.sin(ph);
+    for (let i = 0; i < len; i++) {
+      const nx = x * c - y * sn; y = x * sn + y * c; x = nx;
+      if ((i & 1023) === 1023) { const m = 1 / Math.sqrt(x * x + y * y); x *= m; y *= m; }
+      let idx = start + i;
+      if (o.wrap) idx %= n;
+      out[idx] += y * a * (i < att ? i / att : 1);
+      a *= k;
+    }
+    return;
+  }
+  const chirp = o.chirp ?? decay;
+  const chirpN = Math.max(1, Math.floor(chirp * sr));
+  const r = Math.pow(fEnd / f, 1 / chirpN); // per-sample exponential glide
+  let fi = f, ph = o.phase ?? 0;
   for (let i = 0; i < len; i++) {
-    const t = i / sr;
-    const fi = ratio === 1 ? f : f * Math.pow(ratio, Math.min(1, t / chirp));
+    if (i < chirpN) fi *= r;
     ph += (TAU * fi) / sr;
-    const e = i < att ? i / att : 1;
     let idx = start + i;
     if (o.wrap) idx %= n; else if (idx >= n) break;
-    out[idx] += Math.sin(ph) * a * e;
+    out[idx] += Math.sin(ph) * a * (i < att ? i / att : 1);
     a *= k;
   }
 }
@@ -137,15 +152,16 @@ export function addBubble(out, sr, t0, f0, dur, amp, rise = 0.6, wrap = false) {
   const n = out.length;
   const len = Math.ceil(dur * sr);
   const tau = dur / 4.5;
-  let ph = 0;
+  const k = Math.exp(-1 / (tau * sr));
+  let ph = 0, e = amp;
   for (let i = 0; i < len; i++) {
-    const t = i / sr;
-    const f = f0 * (1 + rise * (t / dur) * (1 + (t / dur)));
+    const u = i / len;
+    const f = f0 * (1 + rise * u * (1 + u));
     ph += (TAU * f) / sr;
     let idx = start + i;
     if (wrap) idx %= n; else if (idx >= n) break;
-    const e = Math.exp(-t / tau) * Math.min(1, i / 8);
-    out[idx] += Math.sin(ph) * amp * e;
+    out[idx] += Math.sin(ph) * e * (i < 8 ? i / 8 : 1);
+    e *= k;
   }
 }
 
@@ -171,6 +187,8 @@ export function addNoise(out, sr, rnd, t0, dur, amp, o = {}) {
   const att = Math.max(1, Math.floor((o.attack ?? 0.001) * sr));
   const decay = o.decay ?? dur / 5;
   const am = o.am || null; // function(t) -> multiplier
+  const kd = Math.exp(-1 / (decay * sr));
+  let ed = 1;
   for (let i = 0; i < len; i++) {
     const t = i / sr;
     if (sweep && (i & 31) === 0) {
@@ -181,7 +199,8 @@ export function addNoise(out, sr, rnd, t0, dur, amp, o = {}) {
     let x = rnd() * 2 - 1;
     if (flt) x = flt.run(x);
     if (flt2) x = flt2.run(x);
-    let e = o.env ? o.env(t / dur, t) : Math.exp(-t / decay);
+    let e = o.env ? o.env(t / dur, t) : ed;
+    ed *= kd;
     if (i < att) e *= i / att;
     if (am) e *= am(t);
     let idx = start + i;

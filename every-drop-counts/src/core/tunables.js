@@ -82,15 +82,22 @@ export const TUNABLES = {
     impactEventMinDv: 2.5,     // m/s: below this no `impact` sound event
     crushForce: 9000,          // N sustained contact force that starts crushing
     crushDps: 25,
-    woundFromDamage: 0.018,    // bleed rate (fraction of part share / s) per hp of damage taken
+    woundFromDamage: 0.018,    // fallback bleed rate per hp for damage kinds not listed in `wound`
+    // Bleed rate (fraction of the part's share per second) opened per hp, BY DAMAGE KIND.
+    // CONTENT balance pass: blunt trauma (wall slams, falls on bare metal) bruises — it barely
+    // bleeds and clots — so a donor beaten to death against bare walls yields almost nothing.
+    // Open wounds (cut / pierce / grind / explode / press) are where the litres come from.
+    wound: { cut: 0.014, pierce: 0.010, grind: 0.02, explode: 0.012, press: 0.02, blunt: 0.0005, crush: 0.001 },
     maxWoundRate: 0.6,         // cap per part (fraction of its share per second)
+    woundClot: 0.45,           // 1/s: open wounds close exponentially (no more free bleed-out)
+    stumpClot: 0.10,           // 1/s: severed stumps close slowly (a sever drains both parts)
+    // (impaled parts never clot while pinned; Thin-Bloods have clotScale 0)
     severBurst: 0.35,          // fraction of BOTH stumps' remaining share released instantly
     severStumpRate: 0.45,      // stump wound rate (fraction of share/s)
-    breakBurst: 0.05,
-    deathBurst: 0.08,
+    breakBurst: 0.02,
+    deathBurst: 0.08,          // on death, open wounds release this fraction of their part
     deadBleedFactor: 1.0,      // dead donors keep bleeding from open wounds
-    bleedMinRate: 0.002,       // wounds below this stop
-    woundClot: 0.0,            // natural clotting per second (0 = never clot)
+    bleedMinRate: 0.004,       // wounds below this stop
   },
 
   pool: {
@@ -111,8 +118,10 @@ export const TUNABLES = {
   scoring: {
     comboWindow: 3.0,          // s between kills to keep Sponsor Match going
     comboMax: 8,
-    comboBase: 1.0,            // L: bonus per kill = base * (multiplier - 1)
-    earlyFinishPerSecond: 0.25,// L per second left when all donors are processed
+    comboBase: 0.6,            // L: bonus per kill = base * (multiplier - 1)
+    // causes that count for Sponsor Match (not 'impact' = bruised to death on bare metal, not 'drown')
+    comboCauses: ['cut', 'impale', 'crush', 'grind', 'explode', 'bleedout'],
+    earlyFinishPerSecond: 0.12,// L per second left when all donors are processed
     processedDelay: 3.0,       // s after the last death before "all processed" counts
   },
 
@@ -128,9 +137,11 @@ export const TUNABLES = {
 
   hazards: {
     spikes: {
-      minSpeed: 3.5,           // m/s normal speed before spikes hurt
-      damagePerSpeed: 9.0,     // hp per m/s over minSpeed (x part mass factor)
-      impaleSpeed: 8.5,        // m/s normal speed that impales
+      // "drops need height": sliding / rocking contact (< ~5 m/s) only scratches; a real drop
+      // (>= ~4 m of free fall at g = 13 => ~10 m/s) impales
+      minSpeed: 5.0,           // m/s normal speed before spikes hurt
+      damagePerSpeed: 10.0,    // hp per m/s over minSpeed
+      impaleSpeed: 10.0,       // m/s normal speed that impales
       impaleParts: ['chest', 'pelvis', 'thigh', 'head', 'upperArm'],
       impaleBleed: 0.12,       // wound rate added on impale
       maxImpaled: 30,
@@ -143,6 +154,73 @@ export const TUNABLES = {
       fling: 6.0,              // tangential m/s given to parts touching the blade
       spin: 30,                // rad/s visual spin (render) — slows with load
       contactMargin: 0.06,
+    },
+    railSaw: {
+      radius: 0.95,
+      period: 6.0,             // s for a full there-and-back sweep along the rail
+      dwell: 0.35,             // fraction of each end the carriage eases in/out (0 = constant speed)
+    },
+    grinder: {
+      width: 2.4,              // mouth length along the wall (m)
+      housing: 0.55,           // housing depth: the roller face stands this far off the wall (m)
+      grabMargin: 0.22,        // parts this close to the roller face (and over the mouth) get grabbed
+      pull: 5.0,               // 1/s steering gain dragging held parts into the jaw
+      pullMax: 3.5,            // m/s cap of the drag
+      chewRate: 34,            // kg/s of meat the rollers swallow (standard donor ~63 kg ≈ 1.9 s)
+      dps: 140,                // grind damage on held parts (severs them from the rest)
+      convertTime: 1.5,        // s over which a swallowed part's blood comes out (100 % yield)
+      clogMass: 85,            // kg held in the mouth at once that jams the rollers (1 donor ok, 2 or a Big Giver jam)
+      clearBoost: 3.0,         // chew-rate multiplier after a slam clears a jam (cannot re-jam meanwhile)
+      clearBoostTime: 2.5,
+      maxHeld: 14,
+    },
+    crusher: {
+      width: 2.6,              // plate size along the wall (m)
+      plate: 0.35,             // plate thickness (m)
+      period: 5.5,             // s per cycle
+      telegraph: 1.1,          // s of light + hiss before the stroke
+      extendTime: 0.22,        // s stroke out
+      holdTime: 0.45,          // s held at full extension
+      retractTime: 1.3,        // s back in
+      gap: 0.32,               // m left between the plate and the opposite wall at full stroke
+      pressDamage: 420,        // hp dealt to every part caught in the closing gap ('press': bursts)
+      pressBurst: 0.55,        // fraction of a pressed part's blood released instantly
+      punch: 9.0,              // m/s given to parts the plate hits mid-stroke
+      punchDamage: 25,
+    },
+  },
+
+  // ---- donor types (CONTENT) — multipliers on TUNABLES.donor --------------------------------
+  donorTypes: {
+    bigGiver: { scale: 1.3, massScale: 2.5, bloodScale: 2.0, hpScale: 1.7, slamScale: 0.45, upright: 3.5, crushBonus: 2.2 },
+    thinBlood: { bloodScale: 0.9, hpScale: 0.8, bleedScale: 3.0, clotScale: 0 },
+    inspector: { hpScale: 1.0, fine: 25, bonus: 20 },
+  },
+
+  // ---- props (CONTENT) ----------------------------------------------------------------------
+  props: {
+    safetySphere: {
+      radius: 1.0,
+      mass: 90,
+      hits: 3,                 // hazard hits to shatter (cracks at each hit before that)
+      hitCooldown: 0.5,        // s: one continuous saw contact counts once per this interval
+      buoyancy: 1.6,           // air-filled: floats high
+      friction: 0.25, restitution: 0.35,
+      walkTorque: 26,          // the Inspector "walks" his sphere: rolling torque (N·m)
+      walkSpeed: 2.6,          // m/s target rolling speed along the current down-wall
+      impactCrack: 21,         // m/s impact speed that also counts as a hit (very hard slams only)
+    },
+    oxygenTank: {
+      radius: 0.2, halfLength: 0.5, mass: 16,
+      punctureImpact: 14,      // m/s impact that punctures
+      rocketTime: 2.0,         // s of thrust before it explodes
+      thrust: 34,              // m/s^2 along the tank axis while rocketing
+      wobble: 6,               // random torque while rocketing
+      chainFuse: 0.3,          // s: a tank punctured by an explosion goes off this much later
+      radius_explosion: 3.6,   // m
+      damage: 190,             // hp at the centre (falls off linearly)
+      impulse: 15,             // m/s at the centre (radial)
+      sphereHits: 2,           // safety-sphere hits dealt by a blast in range
     },
   },
 

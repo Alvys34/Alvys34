@@ -10,7 +10,37 @@ export class Voices {
     this.list = [];
     this.dying = new Set(); // killed voices waiting for 'ended'
     this.nodesLive = 0; // nodes created by voices and not yet disconnected
-    this.stats = { played: 0, limited: 0, dropped: 0, stolen: 0, peakVoices: 0, swept: 0 };
+    this.stats = { played: 0, limited: 0, dropped: 0, stolen: 0, peakVoices: 0, swept: 0, created: 0, stripsMade: 0 };
+    this.pool = [];
+  }
+
+  takeStrip(bus, now) {
+    const ctx = this.eng.ctx;
+    let s = this.pool.pop();
+    if (!s) {
+      const g = ctx.createGain();
+      const p = this.eng.hasPanner ? ctx.createStereoPanner() : null;
+      if (p) g.connect(p);
+      s = { g, p, bus: null };
+      this.stats.stripsMade++;
+    } else {
+      s.g.gain.cancelScheduledValues(0);
+      if (s.p) s.p.pan.cancelScheduledValues(0);
+    }
+    if (s.bus !== bus) {
+      const out = s.p || s.g;
+      if (s.bus) { try { out.disconnect(s.bus); } catch (e) { /* noop */ } }
+      out.connect(bus);
+      s.bus = bus;
+    }
+    s.g.gain.setValueAtTime(0, now);
+    return s;
+  }
+
+  giveStrip(s) {
+    if (!s) return;
+    if (this.pool.length < 64) this.pool.push(s);
+    else { try { s.g.disconnect(); } catch (e) { /* noop */ } try { if (s.p) s.p.disconnect(); } catch (e) { /* noop */ } }
   }
 
   /**
@@ -56,32 +86,27 @@ export class Voices {
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.playbackRate.value = rate;
-    const g = ctx.createGain();
-    g.gain.value = Math.max(0, (o.gain ?? 1) * (eng.trims[bufName] ?? 1));
+    // Gain (+ panner) strips are pooled: only the BufferSource is created per voice.
+    const strip = this.takeStrip(cls.bus, now);
+    const g = strip.g, p = strip.p;
+    g.gain.setValueAtTime(Math.max(0, (o.gain ?? 1) * (eng.trims[bufName] ?? 1)), now);
+    if (p) p.pan.setValueAtTime(o.pan != null && Number.isFinite(Number(o.pan)) ? Math.max(-1, Math.min(1, Number(o.pan))) * 0.85 : 0, now);
     src.connect(g);
-    let p = null;
-    if (o.pan != null && Number.isFinite(o.pan) && eng.hasPanner) {
-      p = ctx.createStereoPanner();
-      p.pan.value = Math.max(-1, Math.min(1, o.pan)) * 0.85;
-      g.connect(p);
-      p.connect(cls.bus);
-    } else {
-      g.connect(cls.bus);
-    }
     const det = cls.busName === 'world' ? eng.sfxDetune : null;
     if (det) det.connect(src.detune);
 
-    const voice = { src, g, p, det, cls, prio: cls.prio, start: when, end: when + buffer.duration / rate, alive: true, ended: false };
+    const voice = { src, g, p, strip, det, cls, prio: cls.prio, start: when, end: when + buffer.duration / rate, alive: true, ended: false };
     src.onended = () => this.release(voice);
     src.start(when);
     if (o.stop) {
       const tEnd = when + o.stop;
-      g.gain.setValueAtTime(g.gain.value, tEnd);
+      g.gain.setValueAtTime(Math.max(0, (o.gain ?? 1) * (eng.trims[bufName] ?? 1)), tEnd);
       g.gain.linearRampToValueAtTime(0, tEnd + 0.06);
       src.stop(tEnd + 0.07);
       voice.end = Math.min(voice.end, tEnd + 0.07);
     }
     this.nodesLive += p ? 3 : 2;
+    this.stats.created++;
     cls.voices.push(voice);
     this.list.push(voice);
     this.stats.played++;
@@ -121,9 +146,8 @@ export class Voices {
     this.unlist(v);
     try { if (v.det) v.det.disconnect(v.src.detune); } catch (e) { /* already gone */ }
     try { v.src.disconnect(); } catch (e) { /* noop */ }
-    try { v.g.disconnect(); } catch (e) { /* noop */ }
-    try { if (v.p) v.p.disconnect(); } catch (e) { /* noop */ }
     v.src.onended = null;
+    this.giveStrip(v.strip);
     this.nodesLive -= v.p ? 3 : 2;
     this.dying.delete(v);
   }
@@ -139,6 +163,8 @@ export class Voices {
 
   stopAll() {
     for (const v of [...this.list, ...this.dying]) { try { v.src.stop(); } catch (e) { /* noop */ } this.release(v); }
+    for (const s of this.pool) { try { s.g.disconnect(); } catch (e) { /* noop */ } try { if (s.p) s.p.disconnect(); } catch (e) { /* noop */ } }
+    this.pool = [];
   }
 
   count() { return this.list.length; }

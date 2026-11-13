@@ -11,6 +11,7 @@
 import { createSpawner } from '../spawner.js';
 import { starsFor } from '../scoring.js';
 import { createPaScript } from './pa.js';
+import { shiftReport } from './report.js';
 
 export default {
   id: 'shift',
@@ -31,9 +32,10 @@ export default {
       clock: { t: 0, duration: level.duration, left: level.duration },
       waves: { total: waves.length, opened: 0 },
       donorsTotal: waves.reduce((s, w) => s + (w.count || 0), 0),
+      /** donors still to process (queued + alive), Inspectors excluded (they are not product) */
       get donorsLeft() {
-        const queued = spawner.pending + waves.slice(nextWave).reduce((s, w) => s + (w.count || 0), 0);
-        return queued + ctx.donors.filter((d) => d.alive).length;
+        const queued = spawner.pendingTargets + waves.slice(nextWave).reduce((s, w) => s + targetCount(w), 0);
+        return queued + ctx.donors.filter((d) => d.alive && !d.mustSurvive).length;
       },
 
       preStep(c, dt) {
@@ -41,7 +43,7 @@ export default {
         mode.clock.t += dt;
         mode.clock.left = Math.max(0, level.duration - mode.clock.t);
         const t = mode.clock.t;
-        const alive = c.aliveCount;
+        const alive = c.aliveTargets;
         if (alive > 0 || spawner.pending > 0) lastActivity = t;
 
         const w = waves[nextWave];
@@ -73,15 +75,14 @@ export default {
       postStep(c) {
         c.pool.volume = c.blood.collected;
         if (mode.status !== 'running') return;
-        const liters = c.scoring.liters;
         const allSpawned = nextWave >= waves.length && spawner.pending === 0;
         const lastDeath = c.donors.reduce((m, d) => Math.max(m, d.deathTime), -1);
-        if (allSpawned && c.aliveCount === 0 && c.donors.length > 0 && mode.clock.t - Math.max(lastDeath, lastActivity) >= T.scoring.processedDelay) {
+        if (allSpawned && c.aliveTargets === 0 && c.donors.length > 0 && mode.clock.t - Math.max(lastDeath, lastActivity) >= T.scoring.processedDelay) {
           const bonus = mode.clock.left * T.scoring.earlyFinishPerSecond;
           if (bonus > 0) c.scoring.addBonus(bonus, 'early-finish');
-          end(c, c.scoring.liters >= level.quota[0] ? 'complete' : 'failed');
+          end(c, 'failed');
         } else if (mode.clock.left <= 0) {
-          end(c, liters >= level.quota[0] ? 'complete' : 'timeout');
+          end(c, 'timeout');
         }
       },
 
@@ -89,16 +90,19 @@ export default {
         return {
           levelId: level.id, mode: 'shift', status: mode.status, result: mode.result,
           clock: { ...mode.clock }, waves: { ...mode.waves }, donorsLeft: mode.donorsLeft, donorsTotal: mode.donorsTotal,
-          quota: level.quota,
+          quota: level.quota, inspectorsAlive: ctx.donors.filter((d) => d.alive && d.mustSurvive).length,
         };
       },
     };
 
-    function end(c, result) {
-      const liters = Math.round(c.scoring.liters * 10) / 10;
-      const stars = result === 'complete' ? starsFor(liters, level.quota) : 0;
+    /** failKind: what the result is if the quota is missed ('failed' = all processed, 'timeout') */
+    function end(c, failKind) {
       mode.status = 'ended';
+      // end-of-shift hooks first (Inspector compliance bonus) so they count toward the rating
       for (const d of c.donors) if (d.def.onShiftEnd) d.def.onShiftEnd(c, d);
+      const liters = Math.round(c.scoring.liters * 10) / 10;
+      const result = liters >= level.quota[0] ? 'complete' : failKind;
+      const stars = result === 'complete' ? starsFor(liters, level.quota) : 0;
       mode.result = {
         result, liters, stars, levelId: level.id, levelNumber: level.number,
         collected: Math.round(c.blood.collected * 10) / 10,
@@ -106,8 +110,18 @@ export default {
         kills: c.scoring.kills, drownings: c.scoring.drownings, bestCombo: c.scoring.combo.best,
         time: Math.round(mode.clock.t * 10) / 10, timeLeft: Math.round(mode.clock.left * 10) / 10,
         donorsTotal: mode.donorsTotal, causes: { ...c.scoring.causes },
+        inspectorDeaths: c.scoring.inspectorDeaths, inspectorsSaved: c.scoring.inspectorsSaved,
+        quota: level.quota.slice(), name: level.name, variant: level.variant || null,
       };
+      mode.result.report = shiftReport(c, level, mode.result);
+      // shift 8: the ending sting (UI plays it after the results screen; only on a pass)
+      mode.result.ending = level.ending && stars >= 1 ? { ...level.ending } : null;
       c.emit('shift:end', { ...mode.result });
+    }
+
+    function targetCount(w) {
+      if (!w.types || Array.isArray(w.types)) return (w.count || 0) - (Array.isArray(w.types) ? w.types.filter((t) => t === 'inspector').length : 0);
+      return (w.count || 0) - (w.types.inspector || 0);
     }
 
     return mode;

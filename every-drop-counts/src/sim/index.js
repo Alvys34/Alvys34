@@ -61,14 +61,16 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
       owners: new Map(),
       dyns: [], parts: [], donors: [], hazards: [], props: [],
       nextPropId: 1, debrisCount: 0,
-      aliveCount: 0, intensity: 0,
+      aliveCount: 0, aliveTargets: 0, intensity: 0,
       splashBudget: 4,
       deferred: [], disposers: [],
       drumBody: null, drumShell: null,
     };
     c.drum = createDrumState(T, level.startAngle || 0);
     world.gravity = { x: -T.drum.gravity * c.drum.ux, y: -T.drum.gravity * c.drum.uy, z: 0 };
+    c.eventCounts = Object.create(null); // per-shift tallies (results report, achievements)
     c.emit = (type, payload = {}, pos = null) => {
+      c.eventCounts[type] = (c.eventCounts[type] || 0) + 1;
       payload.t = Math.round(c.time * 1000) / 1000;
       if (pos) {
         const th = c.drum.theta;
@@ -146,13 +148,14 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
     for (const h of c.hazards) if (h.postStep) h.postStep(c, dt);
     for (const p of c.props) if (!p.removed && p.postStep) p.postStep(c, dt);
     stepBleeding(c, dt);
-    let alive = 0;
+    let alive = 0; let targets = 0;
     for (const d of c.donors) {
       if (d.gone) continue;
       donorPostStep(c, d, dt);
-      if (d.alive) alive++;
+      if (d.alive) { alive++; if (!d.mustSurvive) targets++; }
     }
     c.aliveCount = alive;
+    c.aliveTargets = targets;
     stepPool(c, dt);
     enforceBudgets(c);
     c.scoring.step(c, dt);
@@ -220,6 +223,11 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
       drum: { theta: round3(c.drum.theta), omega: round3(c.drum.omega) },
       slam: { cooldown: round3(c.drum.slamCooldown), ready: c.drum.slamCooldown <= 0, count: c.drum.slamCount },
       hazards: c.hazards.map((h) => ({ id: h.id, type: h.type, load: round3(h.load) })),
+      props: c.props.filter((p) => !p.removed).map((p) => ({ id: p.id, type: p.type, state: p.view && p.view.state, hits: p.view && p.view.hits })),
+      inspectors: c.donors.filter((d) => d.mustSurvive).map((d) => ({ id: d.id, alive: d.alive, encased: !!d.encased, hits: d.sphere ? d.sphere.view.hits : null })),
+      aliveTargets: c.aliveTargets,
+      overtime: m.overtime || null,
+      blood: { pending: round3(c.blood.pending), dissolved: round3(c.blood.dissolved) },
     };
   }
 

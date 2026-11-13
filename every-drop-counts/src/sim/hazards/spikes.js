@@ -7,6 +7,7 @@
  */
 import { wallFrame, wallPoint, heightAboveWall } from '../physics.js';
 import { damagePart } from '../donor.js';
+import { hitProps } from './common.js';
 
 export default {
   type: 'spikes',
@@ -42,7 +43,7 @@ export default {
         contactCooldown -= dt;
         let hits = 0;
         for (const part of c2.parts) {
-          if (part.removed) continue;
+          if (part.removed || part.encased) continue;
           const h = heightAboveWall(drum, spec.wall, part.x, part.y) - part.thick;
           const tc = f.t[0] * part.x + f.t[1] * part.y;
           const inStrip = tc > from - 0.1 && tc < to + 0.1 && part.z > z0 - 0.1 && part.z < z1 + 0.1;
@@ -68,6 +69,18 @@ export default {
             c2.emit('hazard:contact', { hazard: 'spike', intensity: Math.min(1, vn / 14) }, [part.x, part.y, part.z]);
           }
         }
+        // props (tanks puncture, safety spheres crack): same "entering the strip fast" rule
+        hitProps(c2, 'spike', (d) => {
+          const h = heightAboveWall(drum, spec.wall, d.x, d.y) - d.radius;
+          const tc = f.t[0] * d.x + f.t[1] * d.y;
+          const inStrip = tc > from - 0.2 && tc < to + 0.2 && d.z > z0 - 0.2 && d.z < z1 + 0.2 && h < height + 0.12;
+          const key = -d.uid;
+          if (!inStrip) { inside.delete(key); return 0; }
+          if (inside.has(key)) return 0;
+          inside.add(key);
+          const vn = Math.max(-(f.n[0] * d.pvx + f.n[1] * d.pvy), -(f.n[0] * d.vx + f.n[1] * d.vy));
+          return vn > H.minSpeed ? Math.min(1, vn / 14) : 0;
+        });
         // drop records of removed parts
         for (let i = impaled.length - 1; i >= 0; i--) {
           if (impaled[i].part.removed) { impaled[i].part.donor.impaled--; impaled.splice(i, 1); }

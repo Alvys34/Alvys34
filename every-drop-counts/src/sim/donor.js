@@ -64,10 +64,18 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
   const plan = def.plan;
   const id = donorIdCounter++;
   const bloodMax = P.blood * def.bloodScale;
+  // level-wide outfit override (shift 8 "Staff Appreciation Day": donors wear staff uniforms)
+  const lv = ctx.level && ctx.level.donorLook;
+  const useOutfit = lv && !def.keepLook;
   const donor = {
     id, type: def.type, def, alive: true, cause: null, deathTime: -1, spawnTime: ctx.time,
     blood: bloodMax, bloodMax, parts: {}, partList: [], joints: [],
-    look: { gown: rng.pick(def.look.gown), skin: rng.pick(def.look.skin), accessory: def.look.accessory || null, seed: rng.int(0, 1e6) },
+    look: {
+      gown: rng.pick(useOutfit && lv.gown ? lv.gown : def.look.gown), skin: rng.pick(def.look.skin),
+      accessory: def.look.accessory || null, outfit: (useOutfit && lv.outfit) || def.look.outfit || 'gown',
+      scale: def.scale || 1, seed: rng.int(0, 1e6),
+    },
+    mustSurvive: !!def.mustSurvive,
     speech: null, speakTimer: rng.range(1.0, P.speakInterval[1]), flailTimer: rng.range(...P.flailInterval),
     drownTimer: 0, impaled: 0, gone: false, hurtAcc: 0, hurtTimer: 0, lastCause: null, lastCauseTime: -99,
   };
@@ -107,7 +115,7 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
       donor, name: pd.name, role: pd.role, side: pd.side || 0, shape: pd.shape,
       hp: tune.hp * def.hpScale, hpMax: tune.hp * def.hpScale,
       blood: tune.share * bloodMax, bloodMax: tune.share * bloodMax,
-      wound: 0, stumps: [], joint: null, severed: false, broken: false, zeroed: false,
+      wound: 0, opened: false, encased: false, stumps: [], joint: null, severed: false, broken: false, zeroed: false,
       impaled: null, spurting: false, slamScale: def.slamScale, born: ctx.time, detachedAt: -1,
     });
     ctx.owners.set(collider.handle, { kind: 'part', part });
@@ -176,7 +184,10 @@ export function donorPreStep(ctx, donor, dt) {
   const rng = ctx.rng;
   const hpFrac = chest.hp / chest.hpMax;
   const beh = def.behaviour;
-  if (hpFrac > P.uprightMinHp && !chest.severed && !chest.removed) {
+  if (donor.encased) {
+    // inside a safety sphere: bodies are disabled and posed by the sphere prop; only talk
+    donor.flailTimer = 1;
+  } else if (hpFrac > P.uprightMinHp && !chest.severed && !chest.removed) {
     const k = P.uprightTorque * (beh.upright ?? 1);
     for (const part of [chest, pelvis]) {
       if (part.removed || part.impaled) continue;
@@ -195,7 +206,7 @@ export function donorPreStep(ctx, donor, dt) {
     }
   }
   donor.flailTimer -= dt;
-  if (donor.flailTimer <= 0) {
+  if (donor.flailTimer <= 0 && !donor.encased) {
     donor.flailTimer = rng.range(...P.flailInterval);
     const limbs = donor.partList.filter((p) => !p.removed && (p.role === 'forearm' || p.role === 'upperArm' || p.role === 'shin' || p.role === 'head'));
     if (limbs.length) {
@@ -222,7 +233,7 @@ export function donorPostStep(ctx, donor, dt) {
   if (donor.def.postStep) donor.def.postStep(ctx, donor, dt);
   if (donor.alive) {
     const head = donor.parts.head;
-    if (!head.removed && head.sub > 0.6) {
+    if (!head.removed && !head.encased && head.sub > 0.6) {
       donor.drownTimer += dt;
       if (donor.drownTimer >= P.drownSeconds) killDonor(ctx, donor, 'drown');
     } else {
@@ -249,11 +260,13 @@ export function donorPostStep(ctx, donor, dt) {
  * cause: death cause reported if this kills ('cut','impale','crush','grind','impact','explode')
  */
 export function damagePart(ctx, part, amount, kind, cause) {
-  if (part.removed || !(amount > 0)) return;
+  if (part.removed || part.encased || !(amount > 0)) return;
   const D = ctx.T.damage;
   const donor = part.donor;
   part.hp -= amount;
-  part.wound = Math.min(D.maxWoundRate, part.wound + amount * D.woundFromDamage);
+  const wf = (D.wound && D.wound[kind]) ?? D.woundFromDamage;
+  part.wound = Math.min(D.maxWoundRate, part.wound + amount * wf);
+  if (kind !== 'blunt' && kind !== 'crush') part.opened = true;
   donor.hurtAcc += amount;
   donor.lastCause = cause; donor.lastCauseTime = ctx.time;
   ctx.intensity = Math.min(1, (ctx.intensity || 0) + amount * 0.004);
@@ -281,6 +294,7 @@ export function severPart(ctx, part) {
   parent.stumps.push(joint.a1);
   child.wound = Math.max(child.wound, D.severStumpRate);
   parent.wound = Math.max(parent.wound, D.severStumpRate);
+  child.opened = true; parent.opened = true;
   // burst from the cut
   const wp = jointWorldPos(child, joint.a2);
   releaseBlood(ctx, child, child.blood * D.severBurst, { burst: true, pos: wp });
@@ -318,7 +332,7 @@ export function killDonor(ctx, donor, cause = 'bleedout') {
   if (cause !== 'drown') {
     for (const p of donor.partList) {
       if (p.removed) continue;
-      if (p.wound > 0) releaseBlood(ctx, p, p.blood * D.deathBurst);
+      if (p.wound > 0 && p.opened) releaseBlood(ctx, p, p.blood * D.deathBurst);
     }
   }
   const c = donor.parts.chest;
