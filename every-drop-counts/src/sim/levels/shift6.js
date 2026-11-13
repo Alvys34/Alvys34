@@ -18,7 +18,7 @@ export default {
   lesson: 'Puncture a tank next to the crowd. Big Givers are worth it.',
   duration: 130,
   capacity: 150,
-  quota: [45, 118, 145],
+  quota: [45, 120, 145],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

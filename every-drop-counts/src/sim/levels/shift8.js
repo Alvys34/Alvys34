@@ -20,7 +20,7 @@ export default {
   ending: { pa: 'Operator, please proceed to the intake chute. Thank you for donating.', mood: 'calm', next: 'credits' },
   duration: 150,
   capacity: 160,
-  quota: [60, 150, 195],
+  quota: [60, 142, 165],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

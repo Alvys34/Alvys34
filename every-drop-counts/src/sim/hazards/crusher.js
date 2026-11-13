@@ -120,9 +120,14 @@ export default {
           const tcoord = f.t[0] * d.x + f.t[1] * d.y;
           if (Math.abs(tcoord - spec.at) > half + d.radius * 0.5 || d.z < z0 - d.radius || d.z > z1 + d.radius) return 0;
           const h = heightAboveWall(drum, spec.wall, d.x, d.y);
-          if (h - d.radius > ext + 0.1 || struck.has(1e9 + d.uid)) return 0;
+          if (h - d.radius > ext + 0.1) return 0;
+          // anything that will not fit in the remaining gap is PRESSED now (a big safety sphere
+          // wedged under the plate would otherwise be squeezed out of the drum by the solver)
+          const wontFit = span - ext < 2 * d.radius + 0.3;
+          if (wontFit || closing) { if (struck.has(2e9 + d.uid)) return 0; struck.add(2e9 + d.uid); return 3; }
+          if (struck.has(1e9 + d.uid)) return 0;
           struck.add(1e9 + d.uid);
-          return closing ? 3 : 1;
+          return 1;
         });
         if (pressed || hits) {
           inst.load = 1;

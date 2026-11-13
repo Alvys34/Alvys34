@@ -150,3 +150,16 @@ test('drum regimes: slow spin cascades, sustained fast spin pins bodies to the w
   assert.ok(fast.v < 0.8, `fast spin should pin (mean relative speed ${fast.v})`);
   assert.ok(fast.r > 7.5, `pinned bodies sit at the walls/corners (mean radius ${fast.r})`);
 });
+
+test('determinism with all content (shift 8: grinder, crusher, rail saw, tanks, spheres)', async () => {
+  const run = async () => {
+    const { sim } = await makeSim({ seed: 21, level: 8 });
+    runPolicy(sim, 'smart', 14);
+    const out = { hash: poseHash(sim), snap: sim.snapshot() };
+    sim.dispose();
+    return out;
+  };
+  const a = await run(); const b = await run();
+  assert.equal(a.hash, b.hash);
+  assert.deepEqual(a.snap, b.snap);
+});

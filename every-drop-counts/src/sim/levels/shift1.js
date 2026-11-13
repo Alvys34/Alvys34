@@ -30,7 +30,7 @@ export default {
   lesson: 'Rotate the drum. Donations from height are more generous.',
   duration: 105,
   capacity: 150,
-  quota: [20, 42, 54],
+  quota: [20, 40, 50],
   startAngle: 0,
   hatch: { wall: 'back', x: -4.6, y: 0.5, offset: 1.2 },
   hazards: [

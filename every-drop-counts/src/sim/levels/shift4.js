@@ -16,7 +16,7 @@ export default {
   lesson: 'The grinder converts every drop. Feed it slowly; SLAM clears a jam.',
   duration: 135,
   capacity: 135,
-  quota: [40, 92, 120],
+  quota: [40, 100, 115],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

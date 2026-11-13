@@ -18,7 +18,7 @@ export default {
   lesson: 'The pool lifts everything. Bottom hazards drown; use the waterline.',
   duration: 125,
   capacity: 80,
-  quota: [40, 110, 138],
+  quota: [40, 135, 150],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

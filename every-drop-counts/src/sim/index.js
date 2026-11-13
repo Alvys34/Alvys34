@@ -165,6 +165,19 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
 
   function enforceBudgets(c) {
     const T = c.T;
+    // safety net: anything the solver squeezed out of the drum is put back inside (props) or
+    // dissolved (loose parts); should never trigger in normal play (tests count escapes per step)
+    const d0 = c.drum; const lim = [d0.hw - 0.3, d0.hh - 0.3, d0.hd - 0.3];
+    for (const d of c.dyns) {
+      if (d.removed || d.encased) continue;
+      if (Math.abs(d.x) < d0.hw + 0.25 && Math.abs(d.y) < d0.hh + 0.25 && Math.abs(d.z) < d0.hd + 0.25 && Number.isFinite(d.x + d.y + d.z)) continue;
+      c.escapeRescues = (c.escapeRescues || 0) + 1;
+      if (d.kind === 'part') { removePart(c, d, { release: false }); continue; }
+      const nx = Math.max(-lim[0], Math.min(lim[0], d.x || 0)); const ny = Math.max(-lim[1], Math.min(lim[1], d.y || 0)); const nz = Math.max(-lim[2], Math.min(lim[2], d.z || 0));
+      d.body.setTranslation({ x: nx, y: ny, z: nz }, true);
+      d.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      d.x = nx; d.y = ny; d.z = nz; d.vx = 0; d.vy = 0; d.vz = 0;
+    }
     // debris cap: oldest detached parts go first (drained ones preferred)
     let detached = 0;
     for (const p of c.parts) if (!p.removed && p.severed) detached++;

@@ -19,7 +19,7 @@ export default {
   lesson: 'Inspectors must survive. Keep the sphere away from the equipment.',
   duration: 130,
   capacity: 130,
-  quota: [45, 72, 92],
+  quota: [45, 72, 88],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

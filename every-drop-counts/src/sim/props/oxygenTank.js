@@ -58,7 +58,7 @@ export default {
         inst.view.thrust = 1;
       },
 
-      onHazard(c2, info) { puncture(c2, info.hazard, P.rocketTime); },
+      onHazard(c2, info) { puncture(c2, info.hazard, info.intensity >= 3 ? 0.02 : P.rocketTime); },
       onContact(c2, other, speed) { if (speed > P.punctureImpact) puncture(c2, 'impact', P.rocketTime); },
       onExplosion(c2) { puncture(c2, 'explosion', P.chainFuse); },
     };
