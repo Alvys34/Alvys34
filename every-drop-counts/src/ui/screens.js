@@ -55,7 +55,7 @@ export function createScreens(app) {
       </div>
       <div class="boot-foot">${esc(MENU.terminal)} · v<span class="ver"></span></div>
     </section>`)),
-    onKey(action, info) { if (info && info.repeat) return true; if (['confirm', 'back', 'pause', 'slam', 'up', 'down', 'left', 'right', 'restart'].includes(action)) { app.leaveBoot(); return true; } return false; },
+    onKey(action, info) { if (info && info.repeat) return true; if (['confirm', 'back', 'pause', 'up', 'down', 'left', 'right', 'restart'].includes(action)) { app.leaveBoot(); return true; } return false; },
   };
   boot.el.querySelector('.ver').textContent = app.version;
   boot.el.addEventListener('pointerdown', () => { if (app.nav.top === boot) app.leaveBoot(); });

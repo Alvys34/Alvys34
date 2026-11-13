@@ -68,7 +68,7 @@ export default {
     };
     const dyn = makeDyn('prop', body, collider, { mass: P.mass, radius: P.radius, thick: P.radius, owner: inst });
     dyn.buoyancy = P.buoyancy;
-    dyn.slamScale = 0.8;
+    dyn.slamScale = P.slamScale ?? 0.35; // heavy: a slam barely lifts it (slam = the safe tool near him)
     inst.dyns.push(dyn);
     inst.view.dyn = dyn;
     ctx.dyns.push(dyn);

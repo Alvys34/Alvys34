@@ -218,12 +218,12 @@ export function createBlood(ctx) {
     const tx = -oy * dir; const ty = ox * dir;
     const r = best.radius || 1.1;
     const ex = best.x + ox * r; const ey = best.y + oy * r; // the rim where it bites
-    const n = Math.round((7 + 16 * intensity) * emitScale);
+    const n = Math.round((10 + 24 * intensity) * emitScale);
     for (let k = 0; k < n; k++) {
-      const sp = 6 + rnd() * 9;
-      const j = (rnd() - 0.5) * 0.5;
+      const sp = 7 + rnd() * 10;
+      const j = (rnd() - 0.5) * 0.45;
       const vx = (tx + ox * (0.25 + j)) * sp; const vy = (ty + oy * (0.25 - j)) * sp;
-      drops.spawn(ex + (rnd() - 0.5) * 0.2, ey + (rnd() - 0.5) * 0.2, z + (rnd() - 0.5) * 0.3, vx, vy, (rnd() - 0.5) * 3, 0.022 + rnd() * rnd() * 0.07, 5, KIND_DROP);
+      drops.spawn(ex + (rnd() - 0.5) * 0.2, ey + (rnd() - 0.5) * 0.2, z + (rnd() - 0.5) * 0.3, vx, vy, (rnd() - 0.5) * 3, 0.03 + rnd() * rnd() * 0.08, 5, KIND_DROP);
     }
     for (let k = 0; k < n * 1.2; k++) {
       const sp = 7 + rnd() * 10;

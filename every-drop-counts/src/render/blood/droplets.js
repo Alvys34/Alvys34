@@ -43,7 +43,7 @@ export function createParticles(ctx, { cap, mist = false, renderOrder = 0 }) {
     uStretch: { value: mist ? 0.02 : 0.03 },
     uMaxLen: { value: mist ? 0.5 : 0.75 },
     uLight: { value: 1 },
-    uSize: { value: mist ? 1.25 : 1.5 }, // rendered size vs physical size (readability at gameplay zoom)
+    uSize: { value: mist ? 1.4 : 1.85 }, // rendered size vs physical size (readability at gameplay zoom)
   };
   const mat = new THREE.ShaderMaterial({
     name: mist ? 'bloodMist' : 'bloodDrops',

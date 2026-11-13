@@ -81,7 +81,8 @@ export function resolveLook(donor) {
   }
   if (staff && type !== 'inspector') {
     // shift 8 "Staff Appreciation Day": teal scrubs, white clogs, ID badge, some scrub caps
-    const scrub = typeof L.gown === 'number' && isCalm(L.gown) ? L.gown : pick(r, D.staff);
+    // ART palette (darker teal than the level hint so scrubs read against the mint floor band)
+    const scrub = pick(r, D.staff);
     look = {
       ...look, cloth: scrub, lower: scrub, leg: scrub, trim: darken(scrub, 0.18), accent: 0xf7f8f4,
       feet: D.staffShoe, band: 0xf7f8f4, pattern: 0,
@@ -112,8 +113,3 @@ export function resolveLook(donor) {
 }
 
 const KNOWN = { standard: 1, bigGiver: 1, thinBlood: 1, inspector: 1, staff: 1 };
-// a sim colour hint is acceptable for scrubs only if it is not reddish
-function isCalm(hex) {
-  const rr = (hex >> 16) & 255; const g = (hex >> 8) & 255; const b = hex & 255;
-  return !(rr > g + 40 && rr > b + 40);
-}

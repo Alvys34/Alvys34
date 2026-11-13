@@ -33,9 +33,9 @@ export function createDonorViews(ctx) {
 
   const faceTex = track(toTexture(THREE, faceAtlasCanvas(), { aniso: 4 }));
   const mats = createDonorMaterials(THREE, faceTex);
-  track(mats.body); track(mats.hair); track(mats.hairDepth);
+  track(mats.body); track(mats.hair); track(mats.hairDepth); // hair/hairDepth kept for API compat (unused)
   const geos = buildPartGeometries(THREE);
-  const hairGeo = track(buildHairGeometry(THREE));
+  const hairGeos = buildHairGeometry(THREE);
 
   const meshes = {};
   const attrs = {};
@@ -54,12 +54,12 @@ export function createDonorViews(ctx) {
     m.count = 0;
     m.name = `donor-${key}`;
     drumGroup.add(m);
-    meshes[key] = m; attrs[key] = A;
+    meshes[key] = m; attrs[key] = A; m.userData.key = key;
     return m;
   };
   for (const role of ROLES) mkInst(role, geos[role], mats.body, CAP[role]);
-  const hairMesh = mkInst('hair', hairGeo, mats.hair, CAP.head);
-  hairMesh.customDepthMaterial = mats.hairDepth;
+  const hairMeshes = {}; // style id -> InstancedMesh (body material, slot HAIR)
+  for (const st of Object.keys(hairGeos)) hairMeshes[st] = mkInst(`hair${st}`, hairGeos[st], mats.body, 40);
 
   // stump caps (blood tint) + bone nubs
   const stumpGeos = buildStumpGeometries(THREE);
@@ -130,7 +130,7 @@ export function createDonorViews(ctx) {
         if (p.removed) continue;
         const key = p.role;
         const mesh = meshes[key];
-        if (!mesh || mesh.count >= CAP[key]) continue;
+        if (!mesh || mesh.count >= CAP[key] || !CAP[key]) continue;
         const d = p.donor;
         const L = lookOf(d);
         pos.set(p.px + (p.x - p.px) * alpha, p.py + (p.y - p.py) * alpha, p.pz + (p.z - p.pz) * alpha);
@@ -152,9 +152,12 @@ export function createDonorViews(ctx) {
         const pDrain = p.bloodMax > 0 ? 1 - p.blood / p.bloodMax : 0;
         writeInst(key, i, L, dmg + (opened ? 2 : 0), face, Math.max(dDrain, pDrain * 0.85));
         if (key === 'head') {
-          const hi = hairMesh.count++;
-          hairMesh.setMatrixAt(hi, m4);
-          writeInst('hair', hi, L, 0, face, 0);
+          const hm = hairMeshes[L.cols[10]];
+          if (hm && hm.count < 40) {
+            const hi = hm.count++;
+            hm.setMatrixAt(hi, m4);
+            writeInst(hm.userData.key, hi, L, 0, face, 0);
+          }
         }
         // severed stumps: flat blood cap + bone nub aligned with the joint direction
         const st = p.stumps;

@@ -1,9 +1,9 @@
 /**
- * Shift 5 — "Compliance". Inspectors in personal safety spheres. Teaches steering the crowd AWAY:
- * the sphere rolls to the low point, so tilting a wall saw down feeds HIM to it. The saws hang above
- * the floor corners, out of the sphere's reach; a SLAM throws the donors up into them while the
- * heavy ball barely leaves the floor. Flipping the drum onto the ceiling bed drops him too.
- * Inspector dead = −25 L fine. Alive at the end = +20 L.
+ * Shift 5 — "Compliance". Inspectors in personal safety spheres. Teaches steering the crowd AWAY.
+ * Layout: a spike bed in the middle of the floor and a saw low on the right wall. Spikes only hurt
+ * what FALLS on them, so his rolling ball is safe crossing the bed — and a SLAM barely lifts the heavy
+ * ball, so slam re-drops are the safe tool. Flipping the drum drops HIM from height too, and tilting
+ * the right wall down rolls him straight into the saw. Inspector dead = −25 L fine; alive = +20 L.
  */
 export default {
   id: 'shift-5',
@@ -15,10 +15,10 @@ export default {
   capacity: 130,
   quota: [30, 62, 92],
   startAngle: 0,
-  hatch: { wall: 'back', x: 0, y: 1.0, offset: 1.2 },
+  hatch: { wall: 'back', x: -4.8, y: 1.0, offset: 1.2 },
   hazards: [
-    { type: 'saw', wall: 'left', at: -1.6, z: [-2.5, 2.5], radius: 1.1, dir: 1 },
-    { type: 'saw', wall: 'right', at: -1.6, z: [-2.5, 2.5], radius: 1.1, dir: -1 },
+    { type: 'spikes', wall: 'floor', from: -2.4, to: 3.4, z: [-2.5, 2.5] },
+    { type: 'saw', wall: 'right', at: -3.2, z: [-2.5, 2.5], radius: 1.1, dir: -1 },
     { type: 'spikes', wall: 'ceiling', from: -4, to: 4, z: [-2.5, 2.5] },
   ],
   waves: [

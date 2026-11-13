@@ -1,8 +1,11 @@
 /**
  * Shift 2 — "Sharp Objects". Wall saws + ceiling spikes. Teaches SLAM.
- * Layout: the saws hang on the side walls ~3 m above the floor corners — a crowd resting in a corner
- * sits just under a blade, a SLAM throws it through. The ceiling spike bed is out of reach early;
- * as the tank fills the floating crowd rises toward it and slams start reaching it (second half).
+ * Layout: donors land on the bare left end of the floor. A saw gang is bolted to the floor right of
+ * centre (tilt the crowd over to it; a SLAM bounces them back down onto the blades) and a second,
+ * smaller one sits further right. The ceiling spike bed is out of reach early; as the tank fills the
+ * floating crowd rises toward it and slams start reaching it (second half) — or flip them onto it.
+ * Design rule (all shifts): the money hazards sit on the floor / ceiling middles, which mindless
+ * left-right mashing never brings down (it parks a SIDE wall at the bottom).
  * Format: see shift1.js.
  */
 export default {
@@ -15,10 +18,10 @@ export default {
   capacity: 130,
   quota: [26, 55, 80],
   startAngle: 0,
-  hatch: { wall: 'back', x: 0, y: 1.0, offset: 1.2 },
+  hatch: { wall: 'back', x: -4.6, y: 1.0, offset: 1.2 },
   hazards: [
-    { type: 'saw', wall: 'left', at: -2.2, z: [-2.5, 0.6], radius: 1.15, dir: 1 },
-    { type: 'saw', wall: 'right', at: -2.2, z: [-0.6, 2.5], radius: 1.15, dir: -1 },
+    { type: 'saw', wall: 'floor', at: 0.6, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
+    { type: 'saw', wall: 'floor', at: 4.4, z: [-2.5, 0.2], radius: 0.95, dir: 1 },
     { type: 'spikes', wall: 'ceiling', from: -3.5, to: 3.5, z: [-2.5, 2.5] },
   ],
   waves: [

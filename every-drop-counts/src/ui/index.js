@@ -57,6 +57,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
   let audioUnlocked = false;
   let lastShiftNum = 1;
   let layoutKey = '';
+  let freshRun = false;   // set by startRun/resume: swallow the confirming press's slam edge
 
   // ------------------------------------------------------------------ app facade for screens
   const app = {
@@ -216,6 +217,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     hud.reset(r.level, r.overtime ? 'overtime' : 'shift');
     if (r.overtime) sim.startOvertime(); else sim.loadLevel(r.level.id);
     mode = 'playing';
+    freshRun = true;
     input.reset();
     loop.setTimeScale(1);
     loop.setPaused(false);
@@ -239,6 +241,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       bus.emit('game:pause', { paused: true });
     } else if (!p && mode === 'paused') {
       mode = 'playing';
+      freshRun = true;
       nav.clear();
       hud.setVisible(true);
       input.reset();
@@ -387,10 +390,14 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
 
   // ------------------------------------------------------------------ per-frame
   function frame(dt) {
-    const s = input.poll(dt);
+    const before = mode;
+    const s = input.poll(dt);  // may switch modes (gamepad presses are dispatched from here)
     if (s.any) unlockAudio();
     if (mode === 'playing') {
-      sim.setInput({ rotate: s.rotate, brake: s.brake, slam: s.slam });
+      // the A / Space press that began or resumed the shift must not also SLAM
+      const fresh = before !== 'playing' || freshRun;
+      freshRun = false;
+      sim.setInput({ rotate: s.rotate, brake: s.brake, slam: s.slam && !fresh });
       if (s.restart) { startRun(run.ref); return; }
       hud.setRestart(s.restartProgress);
       teach(s, dt);
@@ -477,6 +484,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       toTitle, toShiftSelect, playEnding, toast,
       showResults(r, extras = {}) { run = run || newRun(r.levelNumber || 1); run.result = r; run.ended = true; run.record = { prev: null, isBest: true, notes: [] }; Object.assign(run.extras, extras); showResults(); },
       showOvertime(r, rec) { run = newRun('overtime'); run.result = r; run.ended = true; run.record = rec; showResults(); },
+      brief: (n) => prepare(n),
       open(name) { const m = { settings: app.openSettings, records: app.openRecords, credits: app.openCredits, shifts: app.openShifts }; if (m[name]) m[name](); },
     },
     dispose() {

@@ -146,6 +146,9 @@ export const HUD = {
   dryWarning: 'Tank low',
   wave: (n) => `Wave ${n}`,
   overtime: 'Overtime',
+  demand: 'Demand',
+  pumpIdle: 'Demand pump warming up',
+  inspector: { safe: 'Inspector: observing', risk: 'Inspector: at risk', incident: 'Inspector: incident' },
 };
 
 export const REASONS = {

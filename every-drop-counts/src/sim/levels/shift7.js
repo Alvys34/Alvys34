@@ -1,7 +1,8 @@
 /**
  * Shift 7 — "Rush Hour". Rail saws + a crusher + Thin-Bloods, dense waves.
- * The rail saw sweeps the left wall; the press slams down onto the right end of the floor on a
- * fixed beat (light + hiss first). Thin-Bloods drain completely from any wound — quantity over care.
+ * Donors land on the bare left end. A rail saw sweeps the middle of the floor; the press slams down
+ * from the ceiling onto the right of the floor on a fixed beat (light + hiss first) — tilt the line
+ * under it in time. Thin-Bloods drain completely from any wound — quantity over care.
  */
 export default {
   id: 'shift-7',
@@ -13,11 +14,11 @@ export default {
   capacity: 165,
   quota: [52, 100, 140],
   startAngle: 0,
-  hatch: { wall: 'back', x: -1.5, y: 1.0, offset: 1.2 },
+  hatch: { wall: 'back', x: -5.6, y: 1.0, offset: 1.2 },
   hazards: [
-    { type: 'railSaw', wall: 'left', from: -3.2, to: 3.2, z: [-2.5, 2.5], radius: 1.0, period: 5.5 },
-    { type: 'crusher', wall: 'ceiling', at: 5.2, width: 2.8, z: [-2.5, 2.5], period: 5.0 },
-    { type: 'spikes', wall: 'ceiling', from: -5, to: 0.5, z: [-2.5, 2.5] },
+    { type: 'railSaw', wall: 'floor', from: -2.2, to: 1.4, z: [-2.5, 2.5], radius: 1.0, period: 5.5 },
+    { type: 'crusher', wall: 'ceiling', at: 4.2, width: 2.8, z: [-2.5, 2.5], period: 5.0 },
+    { type: 'spikes', wall: 'ceiling', from: -6, to: 0, z: [-2.5, 2.5] },
   ],
   waves: [
     { at: 1.5, count: 7, types: { standard: 4, thinBlood: 3 } },

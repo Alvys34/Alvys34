@@ -1,0 +1,9 @@
+[
+  { "eval": "window.__edc.setTimeScale(0)" },
+  { "level": 4 }, { "step": 240 }, { "input": { "rotate": 0.6 } }, { "step": 60 }, { "input": { "rotate": 0 } }, { "step": 120 }, { "shot": "s4-grinder" },
+  { "level": 5 }, { "step": 200 }, { "shot": "s5-inspector" },
+  { "level": 6 }, { "step": 200 }, { "input": { "rotate": 0.7 } }, { "step": 50 }, { "input": { "rotate": 0 } }, { "step": 60 }, { "shot": "s6-tanks-biggiver" },
+  { "level": 7 }, { "step": 200 }, { "input": { "rotate": 0.6 } }, { "step": 70 }, { "input": { "rotate": 0 } }, { "step": 150 }, { "shot": "s7-railsaw-crusher" },
+  { "level": 8 }, { "step": 1700 }, { "input": { "rotate": 0.5 } }, { "step": 60 }, { "input": { "rotate": 0 } }, { "step": 60 }, { "shot": "s8-staff" },
+  { "eval": "window.__edc.startOvertime()" }, { "step": 600 }, { "shot": "overtime" }
+]

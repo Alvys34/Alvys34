@@ -67,8 +67,8 @@ function handleSide(ctx, self, other, F, speed, dt, impacts, D) {
   }
   // Big Givers landing on someone press them (an open, bleeding injury — they are a weapon)
   const crushBonus = other.kind === 'part' ? other.part.donor.def.crushBonus : 0;
-  if (crushBonus && speed > 5 && !part.donor.def.crushBonus) {
-    damagePart(ctx, part, (speed - 5) * 8 * crushBonus, 'press', 'crush');
+  if (crushBonus && speed > 8 && !part.donor.def.crushBonus) {
+    damagePart(ctx, part, (speed - 8) * 6 * crushBonus, 'press', 'crush');
   }
   if (speed > D.impactMinDv) {
     let dmg = (speed - D.impactMinDv) * D.impactScale;

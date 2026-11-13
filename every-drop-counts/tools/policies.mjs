@@ -157,6 +157,7 @@ function smartPolicy(s, t, mem) {
     case 'drop': out = tacticDrop(s, t, mem, plan); break;
     case 'slamUp': out = tacticSlamUp(s, t, mem, plan, crowd); break;
     case 'press': out = tacticPress(s, t, mem, plan, crowd); break;
+    case 'waterline': out = tacticWaterline(s, t, mem, plan, crowd); break;
     default: out = tacticTilt(s, t, mem, plan, crowd); break;
   }
   // impaled donors that are drained: shake them loose (re-drop); fresh ones keep bleeding
@@ -188,9 +189,12 @@ function choosePlan(s, crowd, inspectors, mem) {
     // the pool: a hazard at the bottom is under the surface once the tank fills up
     const submerged = hazardSubmerged(s, x, y, target);
     if (submerged) {
-      // use it from above: the crowd floats, slam them up into it
+      // the pool covers it at its own "down" angle: find an angle where it sits AT the waterline
+      // (floaters drift into it), else use it from above (slam the floating crowd up into it)
+      const wl = h.type === 'crusher' ? null : waterlineAngle(s, x, y);
       const head = headroomTo(s, x, y);
-      if (head < 5.5) { tactic = 'slamUp'; target = wrap(target + Math.PI); score *= 1.1; } else score *= 0.25;
+      if (wl != null) { tactic = 'waterline'; target = wl; score *= 1.0; }
+      else if (head < 5.5) { tactic = 'slamUp'; target = wrap(target + Math.PI); score *= 1.1; } else score *= 0.25;
     }
     if (h.type === 'grinder' && h.view.clogged) score *= 1.5;
     if (h.type === 'crusher' && fill > 0.35) score *= 0.4;
@@ -209,7 +213,8 @@ function choosePlan(s, crowd, inspectors, mem) {
     if (!best || score > best.score) best = { h, tactic, target, score };
   }
   if (!best) return { tactic: 'none', duration: 2, wait: d.theta };
-  const duration = { drop: 7, tilt: 8, press: 11, slamUp: 7 }[best.tactic];
+  best.inspector = inspectors.length > 0;
+  const duration = { drop: 7, tilt: 8, press: 11, slamUp: 7, waterline: 6 }[best.tactic];
   return { ...best, duration, wait: best.target };
 }
 
@@ -218,6 +223,22 @@ function hazardSubmerged(s, x, y, theta) {
   const level = solveLevel(theta, 8, 5, s.pool.fill * 160);
   const h = Math.sin(theta) * x + Math.cos(theta) * y;
   return h < level - 0.4;
+}
+
+/** drum angle (closest to the current one) that puts point (x,y) just above the pool surface. */
+function waterlineAngle(s, x, y) {
+  const area = s.pool.fill * 160;
+  let best = null; let bestCost = 1e9;
+  for (let i = 0; i < 64; i++) {
+    const th = s.drum.theta + (i / 64) * TAU - Math.PI;
+    const level = solveLevel(th, 8, 5, area);
+    const h = Math.sin(th) * x + Math.cos(th) * y;
+    const miss = Math.abs(h - level - 0.3);
+    if (miss > 0.7) continue;
+    const cost = miss + 0.25 * Math.abs(wrap(th - s.drum.theta));
+    if (cost < bestCost) { bestCost = cost; best = wrap(th); }
+  }
+  return best;
 }
 
 /** distance (world) from the pool surface up to hazard point when the hazard is at the TOP. */
@@ -230,11 +251,11 @@ function headroomTo(s, x, y) {
 
 /** spikes: agitate with the bed down (falls + flings onto it); every few seconds a full flip drop. */
 function tacticDrop(s, t, mem, plan) {
-  if (mem.phase === 0) { // agitate around bed-down
+  if (mem.phase === 0) { // agitate around bed-down, slam to re-drop them onto it
     const ph = Math.floor((t - mem.phaseT) / 1.2) % 2;
-    const r = steer(s, plan.target + (ph ? 0.85 : -0.85), { k: 6 });
-    if (t - mem.phaseT > 4.8) { mem.phase = 1; mem.phaseT = t; }
-    return { ...r, slam: s.drum.slamCooldown <= 0 && s.pool.fill > 0.15 };
+    const r = steer(s, plan.target + (ph ? 0.6 : -0.6), { k: 6 });
+    if (t - mem.phaseT > 5.5 && !plan.inspector) { mem.phase = 1; mem.phaseT = t; }
+    return { ...r, slam: s.drum.slamCooldown <= 0 && Math.abs(wrap(plan.target - s.drum.theta)) < 0.8 };
   }
   if (mem.phase === 1) { // bring the bed up (crowd falls to the opposite wall)
     const r = steer(s, plan.target + Math.PI, { maxW: 2.2, k: 6 });
@@ -278,6 +299,20 @@ function tacticPress(s, t, mem, plan) {
   // stay still during the telegraph + stroke
   if (v.state === 'telegraph' || v.state === 'extend' || v.state === 'hold') return { rotate: 0, brake: true };
   return r;
+}
+
+/** pool: hold the hazard at the waterline, rock gently so floaters drift through it, slam to lift them in. */
+function tacticWaterline(s, t, mem, plan, crowd) {
+  const wl = waterlineAngle(s, ...hazardPoint(plan.h));
+  if (wl != null) plan.target = wl;
+  const ph = Math.floor((t - mem.phaseT) / 1.5) % 2;
+  const r = steer(s, plan.target + (ph ? 0.3 : -0.3), { k: 4 });
+  let slam = false;
+  if (s.drum.slamCooldown <= 0) {
+    const [hx, hy] = hazardPoint(plan.h);
+    for (const c of crowd) if (Math.hypot(c.x - hx, c.y - hy) < 3.5) { slam = true; break; }
+  }
+  return { ...r, slam };
 }
 
 /** high pool: hazard at the TOP, crowd floating below it, slam them up into it. */

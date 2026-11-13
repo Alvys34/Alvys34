@@ -505,8 +505,8 @@ export function sawBlurCanvas() {
   const r = S / 2;
   const rng = makeRng(3);
   const gr = g.createRadialGradient(r, r, r * 0.3, r, r, r);
-  gr.addColorStop(0, 'rgba(220,228,230,0.0)'); gr.addColorStop(0.55, 'rgba(225,232,234,0.55)');
-  gr.addColorStop(0.86, 'rgba(235,240,242,0.85)'); gr.addColorStop(0.93, 'rgba(160,170,175,0.6)'); gr.addColorStop(1, 'rgba(160,170,175,0)');
+  gr.addColorStop(0, 'rgba(220,228,230,0.0)'); gr.addColorStop(0.5, 'rgba(225,232,234,0.25)');
+  gr.addColorStop(0.8, 'rgba(240,244,246,0.6)'); gr.addColorStop(0.87, 'rgba(60,66,70,0.9)'); gr.addColorStop(0.95, 'rgba(235,240,242,0.7)'); gr.addColorStop(1, 'rgba(160,170,175,0)');
   g.fillStyle = gr; g.beginPath(); g.arc(r, r, r, 0, 7); g.fill();
   for (let i = 0; i < 40; i++) {
     const rr = r * (0.45 + rng() * 0.5);

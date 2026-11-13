@@ -212,8 +212,8 @@ async function pad(browser) {
   await shot(page, 'pad-02-settings');
   await press(1); // B
   check(await topScreen(page) === 'title', 'B goes back');
-  await press(13); await press(13); await press(13); await press(13); await press(13); await press(13);
-  await press(12); await press(12); await press(12); await press(12); await press(12);
+  check((await focusedText(page) || '').startsWith('Settings'), 'B restores focus to Settings');
+  for (let i = 0; i < 6 && !(await focusedText(page) || '').startsWith('Shift select'); i++) await press(12); // d-pad up
   await press(0); // shift select
   check(await topScreen(page) === 'shifts', 'A opens shift select');
   await press(0);
@@ -317,6 +317,35 @@ async function screens(browser) {
     await page.evaluate(() => window.__edc.ui.debug.toast({ title: 'Commendation', name: 'First Drop', kind: 'ach' }));
     await sleep(600);
     await shot(page, `${tag}-13-toast`);
+    // Overtime HUD
+    await page.evaluate(() => { window.__edc.startOvertime(); window.__edc.setTimeScale(0); window.__edc.setInput({ rotate: 0.6 }); });
+    await step(page, 1800, 0);
+    await page.evaluate(() => window.__edc.setInput(null));
+    await step(page, 60, 30);
+    await sleep(600);
+    await shot(page, `${tag}-14-hud-overtime`);
+    // Inspector shift (5): briefing + HUD
+    await page.evaluate(() => window.__edc.ui.debug.toTitle());
+    await sleep(300);
+    await page.evaluate(() => window.__edc.ui.debug.brief(5));
+    await sleep(900);
+    await shot(page, `${tag}-15-briefing-5`);
+    await key(page, 'Enter', 600);
+    await page.evaluate(() => window.__edc.setTimeScale(0));
+    await step(page, 400, 30);
+    await sleep(1500);
+    await shot(page, `${tag}-16-hud-inspector`);
+    // last 10 seconds
+    await page.evaluate(() => { const m = window.__edc.sim.ctx.mode; m.clock.t = m.clock.duration - 7.6; });
+    await step(page, 2, 2);
+    await sleep(900);
+    await shot(page, `${tag}-17-hud-last10`);
+    // ending sting
+    page.evaluate(() => window.__edc.ui.debug.playEnding());
+    await sleep(4200);
+    await shot(page, `${tag}-18-ending-pa`);
+    await sleep(9000);
+    await shot(page, `${tag}-19-ending-drop`);
     reportErrors(page, tag);
     await page.context().close();
   }

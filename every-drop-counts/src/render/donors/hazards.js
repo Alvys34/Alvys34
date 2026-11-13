@@ -152,23 +152,23 @@ function sawGang(ctx, kit, radius, z0, z1) {
   const hub = mesh(THREE, kit.track(C.build()), kit.M.paintedMetal);
   const spin = new THREE.Group();
   spin.add(blades, hub);
-  const blurMat = new THREE.MeshBasicMaterial({ map: kit.blur, transparent: true, opacity: 0, depthWrite: false, color: 0xe6edef });
+  const blurMat = new THREE.MeshBasicMaterial({ map: kit.blur, transparent: true, opacity: 0, depthWrite: false, color: 0xaab4b8 });
   const blurGeo = new THREE.PlaneGeometry(radius * 2.02, radius * 2.02);
   const blur = new THREE.Mesh(blurGeo, blurMat);
   blur.position.z = z1 + 0.03;
   blur.renderOrder = 3;
-  const steel = new THREE.Color(0xf1f5f6);
+  const steel = new THREE.Color(0xc6ced2);
   let stain = 0;
   return {
     spin, blur, bladeMat,
     update(view, dt, stained = 0) {
       spin.rotation.z = view.angle || 0;
       const sp = Math.abs(view.spin || 0);
-      blurMat.opacity = Math.min(0.85, Math.max(0, (sp - 6) / 22));
+      blurMat.opacity = Math.min(0.5, Math.max(0, (sp - 6) / 30));
       blur.rotation.z = (view.angle || 0) * 0.05;
       stain = Math.min(0.65, stain + stained);
       bladeMat.color.copy(steel).lerp(kit.blood, stain);
-      blurMat.color.setRGB(0.9, 0.93, 0.94).lerp(kit.blood, stain * 0.7);
+      blurMat.color.setRGB(0.4, 0.45, 0.47).lerp(kit.blood, stain * 0.7);
     },
     dispose() { bladeMat.dispose(); blurMat.dispose(); blurGeo.dispose(); },
   };

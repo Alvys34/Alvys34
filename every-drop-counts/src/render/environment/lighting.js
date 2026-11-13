@@ -51,21 +51,21 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
   // ---------------- lights ----------------
   const hemi = new THREE.HemisphereLight(0xfff8ec, 0x9fc7b8, 0.62);
   const key = new THREE.DirectionalLight(0xfff4e6, 1.85);
-  key.position.set(-7, 15, 24);
+  key.position.set(-5, 16, 26);
   key.target.position.set(0, -1, -2);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   const sc = key.shadow.camera;
   sc.left = -13.5; sc.right = 13.5; sc.top = 12.5; sc.bottom = -13.5; sc.near = 4; sc.far = 70;
-  key.shadow.bias = -0.0004;
-  key.shadow.normalBias = 0.025;
+  key.shadow.bias = -0.0006;
+  key.shadow.normalBias = 0.07;
   key.shadow.radius = 3;
   const fill = new THREE.DirectionalLight(0xdff3ff, 0.5);
   fill.position.set(14, 4, 12);
   const rim = new THREE.DirectionalLight(0xe8fff4, 0.55);
   rim.position.set(4, 10, -20);
   // rotating beacon light (off until the tank gets full)
-  const spot = new THREE.SpotLight(PAL.emergency, 0, 70, 0.42, 0.55, 1.2);
+  const spot = new THREE.SpotLight(PAL.emergency, 0, 80, 0.36, 0.5, 1.0);
   const bpos = beacon ? beacon.pos : [12, 9, -13];
   spot.position.set(bpos[0], bpos[1], bpos[2]);
   spot.target.position.set(0, 0, 0);
@@ -73,7 +73,7 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
 
   // ---------------- escalation ----------------
   const C = {
-    keyCalm: new THREE.Color(0xfff4e6), keyRed: new THREE.Color(0xff8f80),
+    keyCalm: new THREE.Color(0xfff4e6), keyRed: new THREE.Color(0xff5a46),
     skyCalm: new THREE.Color(0xfff8ec), skyRed: new THREE.Color(0xc2423a),
     gndCalm: new THREE.Color(0x9fc7b8), gndRed: new THREE.Color(0x4a2422),
     fillCalm: new THREE.Color(0xdff3ff), fillRed: new THREE.Color(0xff5a48),
@@ -105,9 +105,9 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
       flick = Math.max(0, flick - dt);
       const dip = flick > 0 && hash(Math.floor(t * 24)) < 0.6 ? 0.55 : 1;
 
-      key.color.copy(C.keyCalm).lerp(C.keyRed, e * 0.75);
+      key.color.copy(C.keyCalm).lerp(C.keyRed, e * 0.85);
       key.intensity = (1.85 - 0.6 * e) * (e > 0.25 ? 0.85 + 0.15 * dip : 1);
-      hemi.color.copy(C.skyCalm).lerp(C.skyRed, e * 0.8);
+      hemi.color.copy(C.skyCalm).lerp(C.skyRed, e * 0.95);
       hemi.groundColor.copy(C.gndCalm).lerp(C.gndRed, e);
       hemi.intensity = (0.62 - 0.17 * e) * (0.9 + 0.1 * dip) + pulse * 0.25 * e;
       fill.color.copy(C.fillCalm).lerp(C.fillRed, e * 0.8);
@@ -119,9 +119,9 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
 
       // beacon: on above ~45 % fill, sweeping
       const b = smooth(0.4, 0.6, f);
-      spot.intensity = b * 260;
+      spot.intensity = b * 520;
       const a = t * 3.4;
-      spot.target.position.set(bpos[0] + Math.cos(a) * 14 - 6, bpos[1] - 6 + Math.sin(a * 0.5) * 2, bpos[2] + Math.sin(a) * 14 + 8);
+      spot.target.position.set(Math.cos(a) * 11, -2 + Math.sin(a * 0.6) * 4, -3 + Math.sin(a) * 2);
       if (beacon) {
         beacon.spinner.rotation.y = b > 0 ? a : 0;
         beacon.spinner.visible = b > 0.01;

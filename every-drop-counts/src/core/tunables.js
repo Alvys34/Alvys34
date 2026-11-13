@@ -209,6 +209,7 @@ export const TUNABLES = {
       walkTorque: 26,          // the Inspector "walks" his sphere: rolling torque (N·m)
       walkSpeed: 2.6,          // m/s target rolling speed along the current down-wall
       impactCrack: 21,         // m/s impact speed that also counts as a hit (very hard slams only)
+      slamScale: 0.35,         // heavy ball: a SLAM lifts it < 1 m (flipping the drum drops it from height)
     },
     oxygenTank: {
       radius: 0.2, halfLength: 0.5, mass: 16,

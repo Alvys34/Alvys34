@@ -16,7 +16,27 @@ import { hints, overtimeRows } from './screens.js';
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function chooseStatLines(r, x, max = 6) {
+const DUP = /^(litres collected|litres delivered|sponsor contributions|fines|time on the clock)\b/i;
+/** CONTENT's report lines (sim/modes/report.js) as { k, v }, minus what the breakdown already shows. */
+function contentLines(r) {
+  const lines = r && r.report && Array.isArray(r.report.lines) ? r.report.lines : null;
+  if (!lines) return null;
+  return lines.filter((t) => typeof t === 'string' && !DUP.test(t)).map((t) => {
+    const i = t.indexOf(': ');
+    return i > 0 ? { k: t.slice(0, i), v: t.slice(i + 2) } : { k: t, v: '' };
+  });
+}
+
+export function chooseStatLines(r, x, max = 7) {
+  const fromContent = contentLines(r);
+  if (fromContent && fromContent.length) {
+    const head = r.kills != null ? [{ k: 'Donors processed', v: `${r.kills}${r.donorsTotal ? ` / ${r.donorsTotal}` : ''}` }] : [];
+    const body = fromContent.filter((l) => !/^donors processed/i.test(l.k));
+    // keep the closing deadpan lines (last two) and trim from the middle if needed
+    const room = Math.max(2, max - head.length);
+    const out = body.length > room ? [...body.slice(0, room - 2), ...body.slice(-2)] : body;
+    return [...head, ...out];
+  }
   const all = STAT_LINES.map((f) => { try { return f(r, x || {}); } catch { return null; } }).filter(Boolean);
   const always = all.filter((l) => l.always && !l.tail);
   const tail = all.filter((l) => l.tail);
@@ -58,7 +78,9 @@ export function createReports(app) {
       const e = results.el;
       const lv = o.level;
       e.querySelector('.r-kicker').textContent = lv ? `Shift ${pad2(lv.number)} · ${lv.name}` : '';
-      const head = r.result === 'complete' ? RESULT_HEADLINES[Math.max(1, r.stars)] : (RESULT_HEADLINES[r.result] || RESULT_HEADLINES.timeout);
+      const head = r.result === 'complete'
+        ? ((r.report && r.report.title) || RESULT_HEADLINES[Math.max(1, r.stars)])
+        : (RESULT_HEADLINES[r.result] || RESULT_HEADLINES.timeout);
       e.querySelector('.headline').textContent = head;
       e.querySelector('.headline').dataset.state = r.stars > 0 ? 'ok' : 'miss';
       const quota = (lv && lv.quota) || [1, 2, 3];
@@ -159,6 +181,7 @@ export function createReports(app) {
           <div class="col report-main">
             <div class="total"><span class="total-l">${esc(OVERTIME.delivered)}</span><span class="total-row"><b class="total-n num blood">0.0</b><span class="total-u">L</span></span></div>
             <dl class="breakdown ot-break"></dl>
+            <dl class="stat-lines ot-lines"></dl>
             <div class="initials-box" hidden>
               <p class="ini-label">${esc(OVERTIME.enterHint)}</p>
               <div class="ini-row">
@@ -182,10 +205,12 @@ export function createReports(app) {
     show(r, o) {
       const e = ot.el;
       e.querySelector('.total-n').textContent = fmtL(r.liters);
+      const otLines = contentLines(r);
+      e.querySelector('.ot-lines').innerHTML = (otLines || []).slice(0, 5).map((l) => `<div class="sl"><dt>${esc(l.k)}</dt><dd>${esc(l.v)}</dd></div>`).join('');
       e.querySelector('.ot-break').innerHTML = `
         <div><dt>${esc(OVERTIME.survived)}</dt><dd class="num">${fmtClock(r.time)}</dd></div>
         <div><dt>Donors processed</dt><dd class="num">${r.kills ?? 0}</dd></div>
-        <div><dt>Cookies distributed</dt><dd class="num">0</dd></div>`;
+        <div><dt>Waves</dt><dd class="num">${r.waves ?? '—'}</dd></div>`;
       const save = getSave();
       ot.state = { entry: o.entry, letters: (o.entry ? o.entry.initials : save.initials).split(''), slot: 0, signed: !o.qualifies };
       const box = e.querySelector('.initials-box');

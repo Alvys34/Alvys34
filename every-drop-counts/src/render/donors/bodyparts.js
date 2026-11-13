@@ -4,8 +4,7 @@
  * to the parent at +y, +z = facing the camera at rest. Each vertex carries:
  *   aSlot  colour slot (see SLOT) resolved per instance in the donor shader
  *   aFace  (u, v, mask) face-atlas projection (head front only)
- * Hair: ALL styles live in one geometry with a per-vertex aStyle; the shader collapses the styles
- * an instance does not use (one draw call for every hairdo and hat).
+ * Hair: one geometry per hairdo/hat style (HAIR ids), drawn with the body material (slot HAIR).
  */
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -121,7 +120,7 @@ export function buildPartGeometries(THREE) {
   return G;
 }
 
-/** Every hairdo / hat in one geometry (head-local, standard head). */
+/** Every hairdo / hat (head-local, standard head) -> { [HAIR id]: BufferGeometry }. */
 export function buildHairGeometry(THREE) {
   const R = HEAD_R; const H = HAIR; const S = SLOT.HAIR;
   const list = [];
@@ -155,10 +154,16 @@ export function buildHairGeometry(THREE) {
   // SCRUB CAP: smooth cap a bit lower at the back + a tie band
   list.push(piece(THREE, sph(R * 1.1, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.42), S, { style: H.SCRUBCAP, pos: [0, R * 0.02, -R * 0.04] }));
   list.push(piece(THREE, sph(R * 1.09, 9, 6, Math.PI, Math.PI, 0, Math.PI * 0.6), S, { style: H.SCRUBCAP }));
-  const g = mergeGeometries(list, false);
-  for (const x of list) x.dispose();
-  g.computeBoundingSphere();
-  return g;
+  // one geometry per style (only styles in use cost anything)
+  const byStyle = {};
+  for (const g of list) {
+    const st = g.attributes.aStyle.array[0];
+    g.deleteAttribute('aStyle');
+    (byStyle[st] = byStyle[st] || []).push(g);
+  }
+  const out = {};
+  for (const k of Object.keys(byStyle)) out[k] = merge(byStyle[k]);
+  return out;
 }
 
 /** Severed-limb cap: flat glossy disc (blood tint) with a darker rim, normal along +y. */

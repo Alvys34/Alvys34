@@ -2,8 +2,9 @@
  * Shift 6 — "Breathe Easy". Oxygen tanks + Big Givers. Chain reactions.
  * A punctured tank rockets for ~2 s and explodes (severing limbs, puncturing other tanks).
  * Big Givers carry double blood, are hard to SLAM and squash whoever they land on.
- * Layout: one saw low on the right wall + a spike bed on the left half of the floor — puncture a
- * tank where the crowd is clumped. Tanks come out of the hatch with the waves.
+ * Layout: donors and tanks land on the bare left end. A spike bed in the middle of the floor and a
+ * saw right of it — tip a tank onto them while the crowd is clumped next to it. Ceiling bed for
+ * flips and the late pool.
  */
 export default {
   id: 'shift-6',
@@ -15,11 +16,11 @@ export default {
   capacity: 150,
   quota: [40, 82, 118],
   startAngle: 0,
-  hatch: { wall: 'back', x: 1.5, y: 1.0, offset: 1.2 },
+  hatch: { wall: 'back', x: -5.0, y: 1.0, offset: 1.2 },
   hazards: [
-    { type: 'saw', wall: 'right', at: -2.3, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
-    { type: 'spikes', wall: 'floor', from: -7.2, to: -3.0, z: [-2.5, 2.5] },
-    { type: 'spikes', wall: 'ceiling', from: 0, to: 5, z: [-2.5, 2.5] },
+    { type: 'spikes', wall: 'floor', from: -2.6, to: 0.8, z: [-2.5, 2.5] },
+    { type: 'saw', wall: 'floor', at: 3.2, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
+    { type: 'spikes', wall: 'ceiling', from: -4, to: 4, z: [-2.5, 2.5] },
   ],
   waves: [
     { at: 1.5, count: 5, types: { standard: 4, bigGiver: 1 }, props: [{ type: 'oxygenTank', count: 2 }] },

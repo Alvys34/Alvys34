@@ -43,6 +43,7 @@ export function createHud({ root, bus, getSettings }) {
         <span class="meta donors-meta">${icon('donor')}<b class="donors-n num">0</b><span class="meta-l">${HUD.donorsLeft}</span></span>
         <span class="meta intake-meta">${icon('hatch')}<span class="intake-t num"></span></span>
       </div>
+      <div class="meta insp-meta" hidden>${icon('hardhat')}<span class="insp-t"></span></div>
       <div class="clock-extra"></div>
     </section>
     <div class="combo" hidden>
@@ -73,6 +74,7 @@ export function createHud({ root, bus, getSettings }) {
   const feed = q('.feed');
   const clockPlate = q('.clock-plate'); const shiftName = q('.shift-name'); const clock = q('.clock');
   const donorsN = q('.donors-n'); const intakeMeta = q('.intake-meta'); const intakeT = q('.intake-t'); const clockExtra = q('.clock-extra');
+  const inspMeta = q('.insp-meta'); const inspText = q('.insp-t');
   const combo = q('.combo'); const comboX = q('.combo-x'); const comboBar = q('.combo-bar > i');
   const dial = q('.slam-dial'); const dialRing = q('.slam-ring .ring-fg');
   const pa = q('.pa'); const paText = q('.pa-text');
@@ -194,8 +196,9 @@ export function createHud({ root, bus, getSettings }) {
 
     // ---- litres / tank ----
     if (mode === 'overtime') {
-      const vol = Math.max(0, s.poolVolume || 0);
-      const cap = (live && live.pool ? live.pool.capacity : 140) * ((live && live.T && live.T.pool.maxFill) || 0.82);
+      const ot = s.overtime || {};
+      const vol = Math.max(0, ot.tank ?? s.poolVolume ?? 0);
+      const cap = ot.tankMax || (live && live.pool ? live.pool.capacity : 140) * ((live && live.T && live.T.pool.maxFill) || 0.82);
       shownLiters += (vol - shownLiters) * Math.min(1, dt * 10);
       set('ln', litersN, odometer(shownLiters), 'innerHTML');
       const pct = Math.min(100, (vol / Math.max(1, cap)) * 100);
@@ -204,8 +207,8 @@ export function createHud({ root, bus, getSettings }) {
       set('low', lowMark.style, `${(lowAt / Math.max(1, cap)) * 100}%`, 'left');
       const low = vol < lowAt && s.clock && s.clock.t > 3;
       cls('tank', tankPlate, 'low', low);
-      const drain = live && live.mode ? live.mode.drainRate || 0 : 0;
-      set('next', nextLine, drain > 0 ? `${HUD.dryWarning && low ? HUD.dryWarning + ' · ' : ''}Demand −${drain.toFixed(2)} L/s` : 'Demand pump warming up', 'textContent');
+      const drain = ot.drainRate ?? (live && live.mode ? live.mode.drainRate || 0 : 0);
+      set('next', nextLine, drain > 0 ? `${low ? `${HUD.dryWarning} · ` : ''}${HUD.demand} −${drain.toFixed(2)} L/s` : HUD.pumpIdle, 'textContent');
       set('extra', clockExtra, `${HUD.delivered} ${s.liters.toFixed(1)} L`);
     } else {
       const L = s.liters || 0;
@@ -257,8 +260,9 @@ export function createHud({ root, bus, getSettings }) {
       cls('intake', intakeMeta, 'hot', false);
       let txt = '';
       if (mode === 'overtime') {
-        const n = live && live.mode && live.mode.waves ? live.mode.waves.opened : 0;
-        txt = n > 0 ? HUD.wave(n) : '';
+        const ot = s.overtime || {};
+        if (Number.isFinite(ot.nextWaveIn)) txt = `${HUD.intake} ${fmtTime(Math.max(0, ot.nextWaveIn))}`;
+        else { const n = live && live.mode && live.mode.waves ? live.mode.waves.opened : 0; txt = n > 0 ? HUD.wave(n) : ''; }
       } else if (level && live && live.mode && live.mode.waves) {
         const opened = live.mode.waves.opened || 0;
         const w = level.waves && level.waves[opened];
@@ -267,6 +271,17 @@ export function createHud({ root, bus, getSettings }) {
       set('intake', intakeT, txt);
       intakeMeta.hidden = !txt;
     }
+
+    // ---- inspector (must survive) ----
+    const insp = s.inspectors || [];
+    if (insp.length) {
+      const dead = insp.filter((x) => !x.alive).length;
+      const cracked = insp.some((x) => x.alive && (!x.encased || (x.hits || 0) > 0));
+      const st = dead ? 'incident' : cracked ? 'risk' : 'safe';
+      set('insp', inspText, dead ? HUD.inspector.incident : cracked ? HUD.inspector.risk : HUD.inspector.safe);
+      if (cache.inspSt !== st) { cache.inspSt = st; inspMeta.dataset.state = st; }
+      inspMeta.hidden = false;
+    } else if (!inspMeta.hidden) inspMeta.hidden = true;
 
     // ---- combo ----
     if (!combo.hidden) {
