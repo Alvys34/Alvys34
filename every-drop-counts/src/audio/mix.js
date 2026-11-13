@@ -76,5 +76,5 @@ export const SCREENS = {
 // Per-sound faders in dB (applied on top of the class gain and the event's own gain).
 // Set by metering (tools/audio/run.mjs) so each sound lands near its target momentary level.
 export const TRIM_DB = {
-  splat: -2.5, splatBig: 2.5, tink: -4.5, glassShatter: 3.5, crushHit: 2, slam: 7, slamReady: -9, intakeBell: -4, crusherTelegraph: 0.5, warnBeep: -4, motorStart: -6, rocket: 0.5, puncture: -0.5, vSpawn: -1, vDeath: 1, vSigh: -2, uiHover: -4, paUrgent: 1, paSpeech: -2, paSpeechGlitch: -2, comboRiser: -3, star3: -1, tick: -10, tickUrgent: -7, jingleStart: 1, jingleComplete: 1, jingleTimeout: 1, jingleFailed: 1,
+  splat: -2.5, splatBig: 2.5, tink: -4.5, glassShatter: 5.5, crushHit: 3, slam: 8.5, slamReady: -9, intakeBell: -4, crusherTelegraph: 0.5, warnBeep: -4, motorStart: -6, rocket: 0.5, puncture: -0.5, vSpawn: -1, vDeath: 1, vSigh: -2, uiHover: -4, paUrgent: 1, paSpeech: -2, paSpeechGlitch: -2, comboRiser: -3, star3: -1, tick: -10, tickUrgent: -7, jingleStart: 1.5, jingleComplete: 1.5, jingleTimeout: 1.5, jingleFailed: 1, squelch: 1, crack: 1, rip: 1, sawCut: 1.5, shunk: 0.5, grindCrunch: 2.5, explosion: 2, glassCrack: 1,
 };
