@@ -89,11 +89,11 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
           // splat: irregular crown edge, thicker centre, a few fingers
           float r = length(q); float a = atan(q.y, q.x); float s = vSeed * 6.2831;
           float edge = 0.80 + 0.10 * sin(a * 3.0 + s) + 0.07 * sin(a * 7.0 + s * 2.3) + 0.05 * sin(a * 13.0 + s * 5.1);
-          float finger = pow(max(0.0, sin(a * 9.0 + s * 3.7)), 12.0) * 0.28 * step(0.5, h1(vSeed * 91.7));
+          float finger = pow(max(0.0, sin(a * 7.0 + s * 3.7)), 16.0) * 0.22 * step(0.7, h1(vSeed * 91.7));
           edge += finger;
           d = smoothstep(edge, edge - 0.10, r) * (0.75 + 0.6 * (1.0 - r * r));
           // a leading "head" on elongated splats (droplet hit at an angle)
-          if (vAsp > 1.4) d += smoothstep(0.42, 0.25, length(q - vec2(0.62, 0.0))) * 0.6;
+          if (vAsp > 1.3) d += smoothstep(0.45, 0.25, length(q - vec2(0.55, 0.0))) * 0.5;
         } else if (kind < 1.5) {
           // streak: soft-edged line with a slightly wavy width
           float w = 1.0 - 0.15 * sin(q.x * 3.1 + vSeed * 40.0);
@@ -219,12 +219,12 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
             float edge = smoothstep(0.30, 0.95, max(g.x, g.y));
             float cap = mix(0.38, 0.86, edge);
             a = min(a * 0.92, cap);
-            col *= 0.85;` : ''}
+            col = mix(col * 0.55, col, wet * 0.4);` : ''}
             gBloodA = a; gBloodWet = wet; gBloodCov = cov;
             diffuseColor = vec4(col, a);
           }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor = mix(${glass ? '0.30' : '0.62'}, 0.06, gBloodWet * smoothstep(0.2, 0.6, gBloodCov));`)
+          roughnessFactor = mix(${glass ? '0.22' : '0.62'}, ${glass ? '0.04' : '0.06'}, gBloodWet * smoothstep(0.2, 0.6, gBloodCov));`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           {
             float hC = bloodH(vBloodUv);

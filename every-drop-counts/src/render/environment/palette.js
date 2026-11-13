@@ -8,6 +8,7 @@
  *   import { PAL, CSS, sharedMaterials, bloodColor } from './palette.js';
  *   const M = sharedMaterials(ctx);    // cached on ctx — every ART piece shares one set
  */
+import { bloodColors } from '../blood/palette.js';
 
 /** Hex palette (three.js colours). Limited on purpose: mint, cream, chrome, hazard, a few pastels. */
 export const PAL = {
@@ -43,27 +44,21 @@ export const DONOR_PAL = {
   socks: [0xfdfcf6, 0xcde9dc, 0xf6e08e, 0xc6b6e6, 0x9ccbe8],
   band: 0xf9fbfa,
   // types
-  thinSkin: [0xf4ece6, 0xeee4dc, 0xf1e8e4],
-  thinGown: [0xd8e6f2, 0xe4def0, 0xdcefe8],
+  thinSkin: [0xeee4de, 0xe8ddd8, 0xf0e6e2],
+  thinGown: [0x9fa9cc, 0xa9a2c9, 0x97b3c4],
   bigGown: [0x4fa88c, 0x5b8fd6, 0xd98d4a, 0x8a70c8],
   suit: 0x3c4a5c, suitDark: 0x2c3644, shirt: 0xf4f6f8, tie: 0x2d6d8a, hardhat: 0xff9a1f, shoe: 0x2a2a2e,
   staff: [0x2f8f7c, 0x3a9c88, 0x2c7f9e], staffCap: 0x7fd0bd, staffShoe: 0xeef2f0,
 };
 
-const BLOOD_FALLBACK = { red: 0xb4001c, green: 0x3fae2a };
-
 /**
- * The single blood tint used by ART for anything blood-coloured. Reads (in order) the VFX-owned
- * shared tint if it exists (`ctx.bloodTint` THREE.Color, or `ctx.blood.tint` / `ctx.blood.color`),
- * else the settings' blood colour mode. Writes into `out` (a THREE.Color) — no allocation.
+ * The blood tint used by ART for anything blood-coloured (stump caps, wound cores, spike tips,
+ * stained blades, the collection-tank gauge, the Thin-Blood band). Source of truth: VFX's
+ * src/render/blood/palette.js (`bloodColors`, follows the red / streamer-green setting).
+ * `which`: 'fresh' (default) | 'deep' | 'dry' | 'hi'. Writes into `out` — no allocation.
  */
-export function bloodColor(ctx, out) {
-  const b = ctx.blood;
-  const t = ctx.bloodTint || (b && (b.tint || b.color || b.bloodColor));
-  if (t && t.isColor) return out.copy(t);
-  if (typeof t === 'number') return out.setHex(t);
-  const mode = (ctx.settings && (ctx.settings.bloodColor || ctx.settings.blood)) || 'red';
-  return out.setHex(BLOOD_FALLBACK[mode] ?? BLOOD_FALLBACK.red);
+export function bloodColor(ctx, out, which = 'fresh') {
+  return out.copy(bloodColors[which] || bloodColors.fresh);
 }
 
 /** Small deterministic RNG (mulberry32) for procedural art. */

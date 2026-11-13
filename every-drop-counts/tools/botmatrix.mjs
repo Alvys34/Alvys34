@@ -13,7 +13,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const get = (k, d) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
 const levels = get('levels', '1,2,3,4,5,6,7,8').split(',');
-const policies = get('policies', 'idle,spin,rock,tumble,slamSpam,flipper,rockAim,park,smart').split(',');
+const policies = get('policies', 'idle,spin,rock,rockR,tumble,slamSpam,flipper,rockAim,park,smart').split(',');
 const seeds = Number(get('seeds', '3'));
 const jobs = Number(get('jobs', String(Math.max(1, os.cpus().length))));
 const seed0 = Number(get('seed', '1'));
@@ -24,6 +24,7 @@ for (const level of levels) for (const policy of policies) for (let k = 0; k < s
 function run(task) {
   return new Promise((res) => {
     const a = [resolve(ROOT, 'tools/simbot.mjs'), '--policy', task.policy, '--seed', String(task.seed), '--json'];
+    if (get('tune', null)) a.push('--tune', get('tune', null));
     if (task.level === 'overtime') a.push('--overtime', '--max', get('max', '900')); else a.push('--level', task.level);
     const p = spawn(process.execPath, a, { cwd: ROOT });
     let out = ''; let err = '';

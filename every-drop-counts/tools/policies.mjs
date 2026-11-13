@@ -8,6 +8,8 @@
  *   idle         never touches anything
  *   spin         holds one direction forever (max speed -> centrifuge)
  *   rock         alternates full left/right every 1.6 s and slams whenever ready (button masher)
+ *   rockR        the same, starting the other way (mashing from rest drifts the drum ~±2 rad, so
+ *                the two variants cover opposite sides of the drum)
  * Exploit candidates (each one a "can I win without reading the level?" strategy):
  *   tumble       steady moderate spin (~1.1 rad/s cascade, the "washing machine")
  *   slamSpam     never rotates, slams on cooldown
@@ -23,6 +25,7 @@
 import { solveLevel } from '../src/sim/geom.js';
 
 const TAU = Math.PI * 2;
+const DEBUG = typeof process !== 'undefined' && process.env && process.env.EDC_BOT_DEBUG;
 const wrap = (a) => { a %= TAU; if (a > Math.PI) a -= TAU; if (a < -Math.PI) a += TAU; return a; };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -79,6 +82,11 @@ export const POLICIES = {
     const phase = Math.floor(t / 1.6) % 2;
     return { rotate: phase ? 1 : -1, slam: s.drum.slamCooldown <= 0 && Math.floor(t * 10) % 25 === 0 };
   },
+  /** mirror of rock (starts the other way): mindless mashing is judged by the better of the two */
+  rockR: (s, t) => {
+    const phase = Math.floor(t / 1.6) % 2;
+    return { rotate: phase ? -1 : 1, slam: s.drum.slamCooldown <= 0 && Math.floor(t * 10) % 25 === 0 };
+  },
   tumble: (s) => ({ rotate: clamp(-(1.1 - s.drum.omega) * 2.5, -1, 1) }),
   slamSpam: (s) => ({ rotate: 0, slam: s.drum.slamCooldown <= 0 }),
   flipper: (s, t, mem) => {
@@ -134,6 +142,7 @@ function smartPolicy(s, t, mem) {
   mem.until = mem.until || 0;
   if (!mem.plan || t > mem.until || (mem.plan.h && !s.hazards.includes(mem.plan.h))) {
     mem.plan = choosePlan(s, crowd, inspectors, mem);
+    if (DEBUG) console.error(`t=${t.toFixed(1)} plan ${mem.plan.tactic} ${mem.plan.h ? mem.plan.h.type + '#' + mem.plan.h.id : ''} target=${(mem.plan.target ?? 0).toFixed(2)} theta=${s.drum.theta.toFixed(2)} crowd=${crowd.length} fill=${s.pool.fill.toFixed(2)}`);
     mem.until = t + mem.plan.duration;
     mem.phase = 0; mem.phaseT = t;
   }
@@ -219,36 +228,45 @@ function headroomTo(s, x, y) {
   return h - level;
 }
 
-/** spikes: gather the crowd on the opposite wall, then flip fast so they fall from height. */
+/** spikes: agitate with the bed down (falls + flings onto it); every few seconds a full flip drop. */
 function tacticDrop(s, t, mem, plan) {
-  const d = s.drum;
-  if (mem.phase === 0) { // gather
-    const r = steer(s, plan.target + Math.PI, { maxW: 1.6 });
-    if (Math.abs(r.err) < 0.15 && t - mem.phaseT > 1.2) { mem.phase = 1; mem.phaseT = t; mem.dir = (mem.dir || 1) * -1; }
+  if (mem.phase === 0) { // agitate around bed-down
+    const ph = Math.floor((t - mem.phaseT) / 1.2) % 2;
+    const r = steer(s, plan.target + (ph ? 0.85 : -0.85), { k: 6 });
+    if (t - mem.phaseT > 4.8) { mem.phase = 1; mem.phaseT = t; }
+    return { ...r, slam: s.drum.slamCooldown <= 0 && s.pool.fill > 0.15 };
+  }
+  if (mem.phase === 1) { // bring the bed up (crowd falls to the opposite wall)
+    const r = steer(s, plan.target + Math.PI, { maxW: 2.2, k: 6 });
+    if (Math.abs(r.err) < 0.25 && t - mem.phaseT > 0.8) { mem.phase = 2; mem.phaseT = t; mem.dir = (mem.dir || 1) * -1; }
     return r;
   }
-  if (mem.phase === 1) { // flip (full speed through 180°)
+  if (mem.phase === 2) { // flip at full speed: they come down from the full height of the drum
     const r = steer(s, plan.target, { k: 9, dir: mem.dir });
-    if (Math.abs(r.err) < 0.2) { mem.phase = 2; mem.phaseT = t; }
+    if (Math.abs(r.err) < 0.2) { mem.phase = 0; mem.phaseT = t; }
     return r;
   }
-  // land + bleed on the spikes, then go again
-  const r = steer(s, plan.target);
-  if (t - mem.phaseT > 2.2) { mem.phase = 0; mem.phaseT = t; }
-  return r;
+  mem.phase = 0;
+  return { rotate: 0 };
 }
 
-/** saws / grinder / rail saw: tilt so the hazard is at the low side, sway a little to feed it. */
+/**
+ * saws / grinder / rail saw: put the hazard on the low side and AGITATE around that angle (sharp
+ * swings throw the crowd through it again and again); slam when the crowd is piled next to it.
+ * The grinder gets a gentler sway (feed it, don't jam it).
+ */
 function tacticTilt(s, t, mem, plan, crowd) {
-  const sway = Math.sin((t - mem.phaseT) * 1.4) * (plan.h.type === 'grinder' ? 0.15 : 0.35);
-  const r = steer(s, plan.target + sway, { maxW: 1.6 });
+  const grinder = plan.h.type === 'grinder';
+  const amp = grinder ? 0.3 : 0.8;
+  const period = grinder ? 3.0 : 2.4;
+  const ph = Math.floor((t - mem.phaseT) / (period / 2)) % 2;
+  const r = steer(s, plan.target + (ph ? amp : -amp), { k: grinder ? 3 : 6 });
   let slam = false;
-  // crowd resting on the hazard wall below a saw: a slam re-throws them through the blade
-  if (s.drum.slamCooldown <= 0 && plan.h.type !== 'grinder' && t - mem.phaseT > 2) {
+  if (s.drum.slamCooldown <= 0 && !grinder) {
     const [hx, hy] = hazardPoint(plan.h);
     let near = 0;
-    for (const c of crowd) if (Math.hypot(c.x - hx, c.y - hy) < 3.2) near++;
-    if (near >= 2 && (t - (mem.lastSlam || 0)) > 3) { slam = true; mem.lastSlam = t; }
+    for (const c of crowd) if (Math.hypot(c.x - hx, c.y - hy) < 3.5) near++;
+    if (near >= 1) slam = true;
   }
   return { ...r, slam };
 }

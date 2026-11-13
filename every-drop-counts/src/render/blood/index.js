@@ -43,6 +43,7 @@ export function createBlood(ctx) {
   let loadScale = 1;
   let frame = 0;
   let time = 0;
+  let lastSimTime = -1;
 
   let rs = 12345;
   const rnd = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return rs / 4294967296; };
@@ -133,8 +134,8 @@ export function createBlood(ctx) {
         if (rnd() < 0.4) atlas.stamp(surf, a, b, da, db, size * 0.9, size * 0.7, 0.75, 4, 1, rnd());
         return;
       }
-      const e = 1 + Math.min(2.6, (vt / (Math.abs(vn) + 1.5)) * 0.9);
-      const R = size * (2.3 + Math.min(2.4, speed * 0.17));
+      const e = 1 + Math.min(1.5, (vt / (Math.abs(vn) + 2.5)) * 0.6);
+      const R = size * (2.4 + Math.min(2.4, speed * 0.17)) * (0.75 + rnd() * 0.5);
       const se = Math.sqrt(e);
       atlas.stamp(surf, a, b, da, db, R * se, R / se, 1.15, 0, 1, rnd());
       if (speed > 4.5 && size > 0.035) {
@@ -336,7 +337,7 @@ export function createBlood(ctx) {
       const h = ux * pcX[i] + uy * pcY[i];
       if (hasPool && h < level - 0.05) {
         wetP[i] = 1;
-        if (doTide) atlas.stamp(pcS[i], pcA[i], HD, 1, 0, 0.62, HD, 0.05, 3, 0.5, rnd());
+        if (doTide && rnd() < 0.5) atlas.stamp(pcS[i], pcA[i] + (rnd() - 0.5) * 0.6, HD, 1, 0, 1.1, HD, 0.04, 3, 0.4, rnd());
         continue;
       }
       let w = wetP[i];
@@ -376,7 +377,7 @@ export function createBlood(ctx) {
                 if (rnd() < 0.25) atlas.stamp(SURF.GLASS, lx + HW, ly + HH, c, -s, 0.7, 0.05, 0.06, 3, 0.4, rnd());
               }
             }
-            atlas.stamp(SURF.BACK, gx + 0.5, gy + 0.5, 1, 0, 0.7, 0.7, 0.03, 3, 0.25, rnd());
+            if (rnd() < 0.3) atlas.stamp(SURF.BACK, gx + rnd(), gy + rnd(), 1, 0, 1.3, 1.3, 0.02, 3, 0.2, rnd());
           }
           continue;
         }
@@ -475,11 +476,15 @@ export function createBlood(ctx) {
       }
       drops.upload(d.omega);
       mist.upload(d.omega);
-      atlas.flush(dt);
+      // drying / glass clearing follow SIM time (also correct when renders are skipped)
+      let simDt = lastSimTime < 0 ? 0 : state.time - lastSimTime;
+      lastSimTime = state.time;
+      if (!(simDt > 0)) simDt = 0; else if (simDt > 5) simDt = 5;
+      atlas.flush(simDt);
     },
     onLevel() {
       drops.clear(); mist.clear(); runners.clear(); atlas.clear();
-      evN = 0; slamPending = false; wetP.fill(0); wetG.fill(0); smearAcc.fill(0); prevFrame.fill(-10);
+      evN = 0; slamPending = false; lastSimTime = -1; wetP.fill(0); wetG.fill(0); smearAcc.fill(0); prevFrame.fill(-10);
       byUid.fill(null);
     },
     setQuality,

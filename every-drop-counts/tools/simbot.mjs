@@ -14,18 +14,19 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { createBus } from '../src/core/bus.js';
 import { createSim } from '../src/sim/index.js';
 import { listLevels } from '../src/sim/levels/index.js';
+import { makeTunables } from '../src/core/tunables.js';
 
 import { POLICIES } from './policies.mjs';
 
 export { POLICIES };
 
-export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds = 400, overtime = false, onStep = null } = {}) {
+export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds = 400, overtime = false, onStep = null, tune = null } = {}) {
   await RAPIER.init();
   const bus = createBus();
   const counters = { sever: 0, impact: 0, events: 0, errors: 0 };
   bus.on('limb:sever', () => counters.sever++);
   bus.on('*', () => counters.events++);
-  const sim = createSim({ RAPIER, bus, seed });
+  const sim = createSim({ RAPIER, bus, seed, tunables: tune ? makeTunables(tune) : null });
   if (overtime) sim.startOvertime(); else sim.loadLevel(level);
   const pol = POLICIES[policy];
   if (!pol) throw new Error(`unknown policy ${policy}`);
@@ -99,7 +100,7 @@ async function main() {
   const out = [];
   for (const policy of policies) {
     for (let r = 0; r < runs; r++) {
-      const res = await runBot({ level, policy, seed: seed0 + r, overtime: has('overtime'), maxSeconds: Number(get('max', '400')) });
+      const res = await runBot({ level, policy, seed: seed0 + r, overtime: has('overtime'), maxSeconds: Number(get('max', '400')), tune: get('tune', null) ? JSON.parse(get('tune', '{}')) : null });
       out.push(res);
       if (!has('json')) {
         console.log(`[${res.level}] ${policy.padEnd(8)} seed=${res.seed} ${res.result.padEnd(9)} L=${res.liters.toFixed(1).padStart(6)} stars=${res.stars} quota=${JSON.stringify(res.quota)} `

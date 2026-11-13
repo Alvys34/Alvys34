@@ -232,6 +232,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       if (run && run.ended) return; // report is about to show
       mode = 'paused';
       loop.setPaused(true);
+      hud.setVisible(false);
       screens.pause.refresh();
       nav.clear();
       nav.push(screens.pause);
@@ -239,6 +240,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     } else if (!p && mode === 'paused') {
       mode = 'playing';
       nav.clear();
+      hud.setVisible(true);
       input.reset();
       loop.setPaused(false);
       loop.resetAccumulator();

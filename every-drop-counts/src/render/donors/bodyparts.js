@@ -128,33 +128,33 @@ export function buildHairGeometry(THREE) {
   const sph = (r, ws, hs, phiS, phiL, thS, thL) => new THREE.SphereGeometry(r, ws, hs, phiS, phiL, thS, thL);
   // three.js sphere: phi around y starting at -x going toward +z? (phi=0 at +x? -> x = -cos(phi)sin(theta)); face is +z => phi = PI/2 .. -> we
   // use "back" coverage = phi in [PI, 2PI] (z <= 0) and full caps for the crown.
-  const crown = (style, r = 1.07, th = 0.36) => list.push(piece(THREE, sph(R * r, 18, 8, 0, Math.PI * 2, 0, Math.PI * th), S, { style, pos: [0, R * 0.02, -R * 0.03] }));
-  const backHalf = (style, r = 1.06, th = 0.62) => list.push(piece(THREE, sph(R * r, 14, 8, Math.PI, Math.PI, 0, Math.PI * th), S, { style }));
+  const crown = (style, r = 1.07, th = 0.36) => list.push(piece(THREE, sph(R * r, 14, 5, 0, Math.PI * 2, 0, Math.PI * th), S, { style, pos: [0, R * 0.02, -R * 0.03] }));
+  const backHalf = (style, r = 1.06, th = 0.62) => list.push(piece(THREE, sph(R * r, 9, 6, Math.PI, Math.PI, 0, Math.PI * th), S, { style }));
   // CROP
   crown(H.CROP); backHalf(H.CROP, 1.055, 0.6);
   // BOB: crown + longer back/sides (down past the ears)
   crown(H.BOB, 1.09, 0.4);
-  list.push(piece(THREE, sph(R * 1.1, 16, 10, Math.PI * 0.82, Math.PI * 1.36, 0, Math.PI * 0.74), S, { style: H.BOB }));
+  list.push(piece(THREE, sph(R * 1.1, 12, 7, Math.PI * 0.82, Math.PI * 1.36, 0, Math.PI * 0.74), S, { style: H.BOB }));
   // BUN
   crown(H.BUN); backHalf(H.BUN, 1.055, 0.58);
-  list.push(piece(THREE, sph(R * 0.48, 10, 8, 0, Math.PI * 2, 0, Math.PI), S, { style: H.BUN, pos: [0, R * 0.92, -R * 0.42] }));
+  list.push(piece(THREE, sph(R * 0.48, 8, 6, 0, Math.PI * 2, 0, Math.PI), S, { style: H.BUN, pos: [0, R * 0.92, -R * 0.42] }));
   // CURLY: bumpy cloud
   const curls = [[0, 0.95, -0.1, 0.5], [0.55, 0.7, -0.15, 0.45], [-0.55, 0.7, -0.15, 0.45], [0.35, 0.8, 0.35, 0.38], [-0.35, 0.8, 0.35, 0.38],
     [0, 0.55, -0.7, 0.5], [0.65, 0.2, -0.45, 0.42], [-0.65, 0.2, -0.45, 0.42], [0, 0.85, 0.3, 0.36]];
-  for (const [x, y, z, r] of curls) list.push(piece(THREE, sph(R * r, 9, 7, 0, Math.PI * 2, 0, Math.PI), S, { style: H.CURLY, pos: [x * R, y * R, z * R] }));
+  for (const [x, y, z, r] of curls) list.push(piece(THREE, sph(R * r, 7, 5, 0, Math.PI * 2, 0, Math.PI), S, { style: H.CURLY, pos: [x * R, y * R, z * R] }));
   // PONYTAIL
   crown(H.PONY); backHalf(H.PONY, 1.055, 0.55);
-  list.push(piece(THREE, new THREE.CapsuleGeometry(R * 0.22, R * 0.9, 3, 8), S, { style: H.PONY, pos: [0, R * 0.15, -R * 1.12], rot: [0.35, 0, 0] }));
+  list.push(piece(THREE, new THREE.CapsuleGeometry(R * 0.22, R * 0.9, 2, 6), S, { style: H.PONY, pos: [0, R * 0.15, -R * 1.12], rot: [0.35, 0, 0] }));
   // SIDE PART (swoop over one side of the forehead)
   crown(H.SIDE, 1.08, 0.38); backHalf(H.SIDE, 1.06, 0.6);
-  list.push(piece(THREE, sph(R * 0.7, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), S, { style: H.SIDE, pos: [R * 0.32, R * 0.62, R * 0.38], rot: [0.5, 0, -0.5], scale: [1.2, 0.5, 0.8] }));
+  list.push(piece(THREE, sph(R * 0.7, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.5), S, { style: H.SIDE, pos: [R * 0.32, R * 0.62, R * 0.38], rot: [0.5, 0, -0.5], scale: [1.2, 0.5, 0.8] }));
   // HARD HAT: dome + brim + front peak + ridge
-  list.push(piece(THREE, sph(R * 1.16, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), S, { style: H.HARDHAT, pos: [0, R * 0.12, 0] }));
-  list.push(piece(THREE, new THREE.CylinderGeometry(R * 1.32, R * 1.36, R * 0.09, 20), S, { style: H.HARDHAT, pos: [0, R * 0.15, R * 0.06], scale: [1, 1, 1.08] }));
+  list.push(piece(THREE, sph(R * 1.16, 16, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), S, { style: H.HARDHAT, pos: [0, R * 0.12, 0] }));
+  list.push(piece(THREE, new THREE.CylinderGeometry(R * 1.32, R * 1.36, R * 0.09, 16), S, { style: H.HARDHAT, pos: [0, R * 0.15, R * 0.06], scale: [1, 1, 1.08] }));
   list.push(piece(THREE, rbox(THREE, R * 0.28, R * 0.25, R * 2.2, R * 0.1, 2), S, { style: H.HARDHAT, pos: [0, R * 1.15, 0] }));
   // SCRUB CAP: smooth cap a bit lower at the back + a tie band
-  list.push(piece(THREE, sph(R * 1.1, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.42), S, { style: H.SCRUBCAP, pos: [0, R * 0.02, -R * 0.04] }));
-  list.push(piece(THREE, sph(R * 1.09, 14, 8, Math.PI, Math.PI, 0, Math.PI * 0.6), S, { style: H.SCRUBCAP }));
+  list.push(piece(THREE, sph(R * 1.1, 14, 6, 0, Math.PI * 2, 0, Math.PI * 0.42), S, { style: H.SCRUBCAP, pos: [0, R * 0.02, -R * 0.04] }));
+  list.push(piece(THREE, sph(R * 1.09, 9, 6, Math.PI, Math.PI, 0, Math.PI * 0.6), S, { style: H.SCRUBCAP }));
   const g = mergeGeometries(list, false);
   for (const x of list) x.dispose();
   g.computeBoundingSphere();

@@ -59,7 +59,7 @@ float edcNoise(vec3 x) {
 const FRAG_MAIN = /* glsl */`
   {
     vec3 col = vDCol;
-    float dead = step(4.5, vState.y);
+    float dead = step(4.5, vState.y + 0.01);
     // drained / dead skin goes pale and cool
     if (vSkin > 0.5) {
       col = mix(col, vec3(0.62, 0.66, 0.70) * (0.55 + 0.45 * max(col.r, max(col.g, col.b))), clamp(vState.z * 0.6 + dead * 0.18, 0.0, 0.8));
@@ -73,9 +73,12 @@ const FRAG_MAIN = /* glsl */`
     }
     // painted face
     if (vFace.z > 0.0) {
-      float cell = vState.y;
+      // varyings are not exact integers: round before splitting the cell index into row / column
+      float cell = floor(vState.y + 0.5);
+      float row = floor((cell + 0.5) / 3.0);
+      float colm = cell - row * 3.0;
       vec2 fuv = clamp(vFace.xy, 0.01, 0.99);
-      vec2 auv = vec2((mod(cell, 3.0) + fuv.x) / 3.0, 1.0 - (floor(cell / 3.0) + 1.0 - fuv.y) / 2.0);
+      vec2 auv = vec2((colm + fuv.x) / 3.0, 1.0 - (row + 1.0 - fuv.y) / 2.0);
       vec4 f = texture2D(uFaceMap, auv);
       col = mix(col, f.rgb, f.a * vFace.z);
     }
@@ -85,11 +88,12 @@ const FRAG_MAIN = /* glsl */`
     float dmg = dmgRaw - 2.0 * opened;
     if (dmg > 0.02) {
       float n = edcNoise(vObj * 15.0 + vState.w) * 0.65 + edcNoise(vObj * 41.0 + vState.w * 1.7) * 0.35;
-      float th = 1.0 - dmg * 0.8;
-      float bruise = smoothstep(th, th + 0.07, n);
-      col = mix(col, col * vec3(0.42, 0.36, 0.48), bruise * 0.85);
-      float core = smoothstep(th + 0.1, th + 0.16, n) * opened;
-      col = mix(col, uBlood * 0.85, core);
+      float tb = 1.0 - dmg * 0.62;
+      float bruise = smoothstep(tb, tb + 0.06, n);
+      col = mix(col, col * vec3(0.46, 0.4, 0.52), bruise * 0.8);
+      float tc = 1.04 - dmg * 0.4;
+      float core = smoothstep(tc, tc + 0.05, n) * opened;
+      col = mix(col, uBlood * mix(0.55, 0.9, smoothstep(tc + 0.05, tc + 0.2, n)), core);
     }
     // dead: a touch desaturated
     col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))), dead * 0.3);

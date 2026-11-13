@@ -17,6 +17,8 @@ import { HUD, reasonLabel } from './copy.js';
 
 const fmtTime = (s) => { const t = Math.max(0, Math.ceil(s)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 const fmtUp = (s) => { const t = Math.max(0, Math.floor(s)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+/** meter-style litres: always 3 integer digits, leading zeros dimmed (no layout shift as it grows) */
+const odometer = (v) => { const t = Math.max(0, v).toFixed(1); const p = t.padStart(5, '0'); const lead = p.length - t.length; return lead > 0 ? `<span class="lz">${p.slice(0, lead)}</span>${t}` : t; };
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export function createHud({ root, bus, getSettings }) {
@@ -26,7 +28,7 @@ export function createHud({ root, bus, getSettings }) {
   el.innerHTML = `
     <section class="plate tank-plate">
       <div class="plate-label"><span class="tank-label">${HUD.liters}</span><span class="tank-sub"></span></div>
-      <div class="liters"><span class="liters-n num">0.0</span><span class="liters-u">L</span></div>
+      <div class="liters"><span class="liters-n num"><span class="lz">00</span>0.0</span><span class="liters-u">L</span></div>
       <div class="gauge">
         <div class="gauge-marks"></div>
         <div class="gauge-track"><div class="gauge-fill"></div><div class="gauge-low"></div></div>
@@ -195,7 +197,7 @@ export function createHud({ root, bus, getSettings }) {
       const vol = Math.max(0, s.poolVolume || 0);
       const cap = (live && live.pool ? live.pool.capacity : 140) * ((live && live.T && live.T.pool.maxFill) || 0.82);
       shownLiters += (vol - shownLiters) * Math.min(1, dt * 10);
-      set('ln', litersN, shownLiters.toFixed(1));
+      set('ln', litersN, odometer(shownLiters), 'innerHTML');
       const pct = Math.min(100, (vol / Math.max(1, cap)) * 100);
       set('fill', fill.style, `${pct}%`, 'width');
       const lowAt = Math.max(5, overtimeStart * 0.35);
@@ -210,7 +212,7 @@ export function createHud({ root, bus, getSettings }) {
       const diff = L - shownLiters;
       shownLiters += diff * Math.min(1, dt * (Math.abs(diff) > 10 ? 14 : 8));
       if (Math.abs(L - shownLiters) < 0.05) shownLiters = L;
-      set('ln', litersN, shownLiters.toFixed(1));
+      set('ln', litersN, odometer(shownLiters), 'innerHTML');
       if (L - lastLiters >= 0.6) bump(litersBox, 'tick');
       const qk = (s.quota || []).join(',');
       if (qk !== quotaKey) { quotaKey = qk; buildMarks(s.quota || [1, 2, 3]); starsLit = 0; }

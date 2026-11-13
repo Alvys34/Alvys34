@@ -42,15 +42,15 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
   envScene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
   for (const m of [roomMat, floorMat, panelMat, winMat]) m.dispose();
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.55;
+  scene.environmentIntensity = 0.42;
   disposables.push(envRT);
 
   scene.background = new THREE.Color(0xcfe6dc);
   scene.fog = new THREE.Fog(0xcfe6dc, 60, 140);
 
   // ---------------- lights ----------------
-  const hemi = new THREE.HemisphereLight(0xfff8ec, 0x9fc7b8, 0.9);
-  const key = new THREE.DirectionalLight(0xfff4e6, 2.3);
+  const hemi = new THREE.HemisphereLight(0xfff8ec, 0x9fc7b8, 0.62);
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.85);
   key.position.set(-7, 15, 24);
   key.target.position.set(0, -1, -2);
   key.castShadow = true;
@@ -60,7 +60,7 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.025;
   key.shadow.radius = 3;
-  const fill = new THREE.DirectionalLight(0xdff3ff, 0.65);
+  const fill = new THREE.DirectionalLight(0xdff3ff, 0.5);
   fill.position.set(14, 4, 12);
   const rim = new THREE.DirectionalLight(0xe8fff4, 0.55);
   rim.position.set(4, 10, -20);
@@ -106,14 +106,14 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
       const dip = flick > 0 && hash(Math.floor(t * 24)) < 0.6 ? 0.55 : 1;
 
       key.color.copy(C.keyCalm).lerp(C.keyRed, e * 0.75);
-      key.intensity = (2.3 - 0.8 * e) * (e > 0.25 ? 0.85 + 0.15 * dip : 1);
+      key.intensity = (1.85 - 0.6 * e) * (e > 0.25 ? 0.85 + 0.15 * dip : 1);
       hemi.color.copy(C.skyCalm).lerp(C.skyRed, e * 0.8);
       hemi.groundColor.copy(C.gndCalm).lerp(C.gndRed, e);
-      hemi.intensity = (0.9 - 0.25 * e) * (0.9 + 0.1 * dip) + pulse * 0.25 * e;
+      hemi.intensity = (0.62 - 0.17 * e) * (0.9 + 0.1 * dip) + pulse * 0.25 * e;
       fill.color.copy(C.fillCalm).lerp(C.fillRed, e * 0.8);
-      fill.intensity = 0.65 + 0.5 * e * pulse;
+      fill.intensity = 0.5 + 0.5 * e * pulse;
       rim.intensity = 0.55 * (1 - 0.5 * e);
-      scene.environmentIntensity = 0.55 - 0.25 * e;
+      scene.environmentIntensity = 0.42 - 0.18 * e;
       scene.background.copy(C.bgCalm).lerp(C.bgRed, e * 0.85);
       scene.fog.color.copy(scene.background);
 

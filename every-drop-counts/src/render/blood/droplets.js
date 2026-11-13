@@ -43,6 +43,7 @@ export function createParticles(ctx, { cap, mist = false, renderOrder = 0 }) {
     uStretch: { value: mist ? 0.02 : 0.03 },
     uMaxLen: { value: mist ? 0.5 : 0.75 },
     uLight: { value: 1 },
+    uSize: { value: mist ? 1.25 : 1.5 }, // rendered size vs physical size (readability at gameplay zoom)
   };
   const mat = new THREE.ShaderMaterial({
     name: mist ? 'bloodMist' : 'bloodDrops',
@@ -50,13 +51,13 @@ export function createParticles(ctx, { cap, mist = false, renderOrder = 0 }) {
     uniforms,
     vertexShader: /* glsl */`
       attribute vec3 iPos; attribute vec3 iVel; attribute vec4 iMisc; // size, kind, fade, seed
-      uniform float uOmega; uniform float uStretch; uniform float uMaxLen;
+      uniform float uOmega; uniform float uStretch; uniform float uMaxLen; uniform float uSize;
       varying vec2 vQ; varying float vKind; varying float vFade; varying float vRatio; varying float vSeed;
       void main() {
         vec3 vel = iVel + vec3(-uOmega * iPos.y, uOmega * iPos.x, 0.0);
         vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
         vec3 vv = (modelViewMatrix * vec4(vel, 0.0)).xyz;
-        float r = iMisc.x;
+        float r = iMisc.x * uSize;
         float sp = length(vv.xy);
         vec2 dir = sp > 1e-4 ? vv.xy / sp : vec2(0.0, 1.0);
         float k = iMisc.y > 1.5 ? 0.0 : 1.0; // bubbles do not stretch

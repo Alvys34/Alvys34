@@ -141,6 +141,7 @@ export function createNav({ bus, root }) {
   }
   function leave(scr, keepVisible = false) {
     if (scr.onLeave) scr.onLeave();
+    for (const e of scr.el.querySelectorAll('.is-focus')) e.classList.remove('is-focus');
     if (!keepVisible) show(scr, false); else scr.el.setAttribute('inert', '');
   }
 

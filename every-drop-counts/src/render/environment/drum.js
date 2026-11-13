@@ -103,12 +103,12 @@ export function createDrum(ctx, M, signs) {
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
     const seg = new THREE.RingGeometry(R0 + 0.12, R1 - 0.1, 10, 1, a + 0.03, Math.PI / 8 - 0.06);
-    F.add(seg, { pos: [0, 0, rimZ + 0.62], color: i === 0 ? PAL.cream0 : i % 2 ? PAL.hazard : PAL.mint3 });
+    F.add(seg, { pos: [0, 0, rimZ + 0.62], color: i === 0 ? PAL.cream0 : i % 4 === 2 ? PAL.hazard : i % 2 ? 0x66737a : 0x5a666c });
   }
   // struts from the chamber to the rim
   const sz = -HD - 1.2;
   for (const [x, y, w, h] of [[0, HH + 0.5 + (R0 - HH) / 2, 1.4, R0 - HH + 0.8], [0, -(HH + 0.5 + (R0 - HH) / 2), 1.4, R0 - HH + 0.8], [HW + 0.5 + (R0 - HW) / 2, 0, R0 - HW + 0.8, 1.4], [-(HW + 0.5 + (R0 - HW) / 2), 0, R0 - HW + 0.8, 1.4]]) {
-    F.add(rbox(THREE, w, h, 1.1, 0.15), { pos: [x, y, sz], color: PAL.mint4 });
+    F.add(rbox(THREE, w, h, 1.1, 0.15), { pos: [x, y, sz], color: 0x56666b });
   }
   // chamber back plate + exterior shell walls (only seen at grazing angles, keep simple)
   F.add(rbox(THREE, HW * 2 + 1.6, HH * 2 + 1.6, 0.6, 0.2), { pos: [0, 0, -HD - 0.32], color: PAL.enamelDeep });

@@ -82,7 +82,7 @@ export function createPoolView(ctx) {
         float lx = uC * vW.x + uS * vW.y; float ly = -uS * vW.x + uC * vW.y;
         if (abs(lx) > uHW || abs(ly) > uHH) discard;
         float d = vDepth;
-        vec3 col = mix(uBloodFresh * 0.62, uBloodDeep * 0.55, smoothstep(0.0, 3.2, d));
+        vec3 col = mix(uBloodFresh * 0.42, uBloodDeep * 0.38, smoothstep(0.0, 2.6, d));
         float a = vAlpha;
         if (vFront > 0.5) {
           float men = smoothstep(0.08, 0.0, d);
@@ -201,11 +201,11 @@ export function createPoolView(ctx) {
     slices = Math.max(2, Math.min(MAX_SLICES, nSl | 0));
     // back -> front so blending order is right; total absorption ~0.9 at the back wall
     const back = slices - 1;
-    const aBack = 1 - Math.pow(0.12 / 0.72, 1 / back);
+    const aBack = 1 - Math.pow(0.035 / 0.5, 1 / back);
     for (let k = 0; k < slices; k++) {
       const front = k === slices - 1;
       const z = front ? HD - 0.03 : -HD + 0.04 + ((HD * 2 - 0.25) * (k + 0.5)) / back;
-      iSlice[k * 3] = z; iSlice[k * 3 + 1] = front ? 1 : 0; iSlice[k * 3 + 2] = front ? 0.28 : aBack;
+      iSlice[k * 3] = z; iSlice[k * 3 + 1] = front ? 1 : 0; iSlice[k * 3 + 2] = front ? 0.5 : aBack;
     }
     iSliceAttr.needsUpdate = true;
     curtainGeo.instanceCount = slices;
@@ -232,7 +232,13 @@ export function createPoolView(ctx) {
 
   const fx = {
     wave: H, waveR: R, waveInvDx: 1 / dx, waveN: N, on: false, level: -1e9,
-    impulse(xw, a) { IMP[colOf(xw)] += a; },
+    impulse(xw, a) {
+      // spread over a few columns (single-column kicks make saw-tooth spikes)
+      const c = colOf(xw);
+      IMP[c] += a * 0.4;
+      if (c > 0) IMP[c - 1] += a * 0.2; if (c < N - 1) IMP[c + 1] += a * 0.2;
+      if (c > 1) IMP[c - 2] += a * 0.1; if (c < N - 2) IMP[c + 2] += a * 0.1;
+    },
     addFoam(xw, a) { const c = colOf(xw); F[c] = Math.min(2, F[c] + a); },
     ring(xw, z, amp) { const r = rings[ringHead]; ringHead = (ringHead + 1) % 8; r.set(xw, z, time, amp); },
   };
@@ -270,18 +276,21 @@ export function createPoolView(ctx) {
     for (let i = i0; i <= i1; i++) {
       const hl = i > i0 ? H[i - 1] : H[i]; const hr = i < i1 ? H[i + 1] : H[i];
       let acc = c2 * (hl + hr - 2 * H[i]) - 0.9 * V[i];
-      acc += -0.09 * al * (xs[i] - xmid);                            // slosh/tilt against angular acceleration
+      acc += -0.06 * al * (xs[i] - xmid);                            // slosh/tilt against angular acceleration
       const el = Math.exp(-(xs[i] - xl) / 0.6); const er = Math.exp(-(xr - xs[i]) / 0.6);
-      acc += 1.6 * w * (xr * er + xl * el);                         // liquid dragged up the rising wall
-      V[i] += acc * h - IMP[i];
+      acc += 0.3 * w * (xr * er + xl * el);                         // liquid dragged up the rising wall
+      V[i] += acc * h - Math.max(-0.6, Math.min(0.6, IMP[i]));
       IMP[i] = 0;
     }
+    // viscosity: diffuse velocity so high-frequency noise (many small kicks) cannot build spikes
+    for (let i = i0 + 1; i < i1; i++) SL[i] = V[i - 1] + V[i + 1] - 2 * V[i];
+    for (let i = i0 + 1; i < i1; i++) V[i] += 0.22 * SL[i];
     let mean = 0;
     for (let i = i0; i <= i1; i++) { H[i] += V[i] * h; mean += H[i]; }
     mean /= n;
     for (let i = i0; i <= i1; i++) {
       let v = H[i] - mean;
-      if (v > 1.3) { v = 1.3; V[i] *= 0.5; } else if (v < -1.3) { v = -1.3; V[i] *= 0.5; }
+      if (v > 0.95) { v = 0.95; V[i] *= 0.5; } else if (v < -0.95) { v = -0.95; V[i] *= 0.5; }
       H[i] = v;
     }
     const fd = Math.exp(-h / 3.2);
@@ -377,7 +386,7 @@ export function createPoolView(ctx) {
         if (c < i0 || c > i1) continue;
         const vUp = UX * dy.vx + UY * dy.vy;
         const mf = Math.min(1.5, dy.mass / 8);
-        if (sub < 0.97) V[c] += Math.max(-8, Math.min(8, vUp)) * 1.1 * mf * dt;
+        if (sub < 0.97) fx.impulse(xw, -Math.max(-8, Math.min(8, vUp)) * 0.9 * mf * dt);
         // a body leaving the liquid fast: a little sheet of blood follows it up
         if (dy.prevSub > 0.3 && sub <= 0.3 && vUp > 3) {
           const nd = Math.round(Math.min(25, vUp * 3 * mf) * (ctx.blood ? ctx.blood.emitScale : 1));

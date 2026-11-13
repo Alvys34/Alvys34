@@ -28,6 +28,10 @@ export function createCameraRig(ctx) {
   const MARGIN = 0.6;       // metres of frame kept around the interior (absorbs shake/punch)
   const TOP_RESERVE = 0.04; // fraction of the screen height kept for the HUD strip
   const LOOKAHEAD = 0.55;   // s of rotation anticipated
+  // 1 = fully adaptive (tightest framing per angle), 0 = always the worst-case (diagonal) framing.
+  // Slightly below 1 softens the zoom in/out while rocking. settings.cameraZoomRange overrides.
+  const ZOOM_RANGE = 0.85;
+  const DIAG = Math.hypot(HW, HH);
   camera.fov = FOV;
   camera.near = 0.5; camera.far = 220;
   camera.updateProjectionMatrix();
@@ -91,7 +95,9 @@ export function createCameraRig(ctx) {
       if (e2[0] > ex) ex = e2[0];
       if (e2[1] > ey) ey = e2[1];
     }
-    const target = required(ex, ey);
+    const zr = settings.cameraZoomRange != null ? Math.max(0, Math.min(1, Number(settings.cameraZoomRange) || 0)) : ZOOM_RANGE;
+    const worst = required(DIAG, DIAG);
+    const target = Math.max(need, worst + (required(ex, ey) - worst) * zr);
     lastReq = need;
     if (snap || dist <= 0) { dist = target; snap = false; holdT = 0.6; } else if (target > dist) {
       dist += (target - dist) * (1 - Math.exp(-dt / 0.12));

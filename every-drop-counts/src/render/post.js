@@ -127,10 +127,11 @@ export function createPost(ctx) {
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       // grade: clinical cool -> sickly, red-shifted with fill
       float f = smoothstep(0.04, 0.9, uFill);
-      vec3 wb = mix(vec3(0.965, 1.0, 1.045), vec3(1.07, 0.985, 0.82), f);
+      vec3 wb = mix(vec3(0.965, 1.0, 1.045), vec3(1.05, 0.99, 0.87), f);
       col *= wb;
       col = mix(vec3(lum), col, mix(1.04, 0.9, f) + bl * (0.12 + 0.1 * f));
-      col.r += lum * 0.05 * f;
+      col.r += lum * 0.04 * f;
+      col = max(col - vec3(0.004 * f), 0.0) * (1.0 + 0.05 * f); // a touch of crush/contrast as it gets grim
       // accents: desaturate everything except blood
       col = mix(col, vec3(lum) * vec3(1.0, 1.0, 1.04), uDesat * (1.0 - bl));
       col *= uExposure;
@@ -141,7 +142,6 @@ export function createPost(ctx) {
       col *= 1.0 - uVignette * vig;
       vec3 edgeRed = uBloodFresh * 0.6 + vec3(0.06, 0.0, 0.0);
       col = mix(col, edgeRed, clamp(vig * (uRedEdge + 0.22 * f * f), 0.0, 0.85));
-      col = mix(col, vec3(1.0, 0.96, 0.92), uFlash * 0.18);
       vec4 o = sRGBTransferOETF(vec4(clamp(col, 0.0, 1.0), 1.0));
       float g = hash(uv * uRes + fract(uTime * 7.13) * 91.7) - 0.5;
       o.rgb += g * uGrain;
@@ -251,14 +251,14 @@ export function createPost(ctx) {
     U.uBloom.value = useBloom ? 0.32 + 0.12 * f : 0;
     U.uTime.value = time;
     U.uFill.value = f;
-    U.uVignette.value = 0.2 + 0.32 * f + 0.15 * flash + 0.12 * slow;
-    U.uCA.value = q.ca ? 0.0015 + 0.006 * f * f + 0.004 * flash + 0.003 * radial : 0;
+    U.uVignette.value = 0.2 + 0.3 * f + 0.1 * flash + 0.12 * slow;
+    U.uCA.value = q.ca ? 0.001 + 0.0045 * f * f + 0.002 * flash + 0.002 * radial : 0;
     U.uGrain.value = q.grain === false ? 0 : 0.012 + 0.04 * f;
     U.uFlash.value = flash;
-    U.uRedEdge.value = 0.45 * flash;
+    U.uRedEdge.value = 0.55 * flash * flash;
     U.uDesat.value = Math.min(1, 0.85 * slow + 0.7 * hit);
     U.uRadial.value = q.bloom > 0 || q.radial ? Math.max(radial, slow * 0.5) : 0;
-    U.uExposure.value = 1 + 0.32 * flash + 0.1 * hit;
+    U.uExposure.value = 1 + 0.14 * flash * flash + 0.08 * hit;
     pass(composite, null);
   }
 

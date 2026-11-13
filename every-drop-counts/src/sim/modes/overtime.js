@@ -27,7 +27,7 @@ export const OVERTIME_LEVEL = {
   duration: Infinity,
   capacity: 150,
   quota: [0, 0, 0],
-  hatch: { wall: 'back', x: 0, y: 1.2, offset: 1.2 },
+  hatch: { wall: 'back', x: 5.2, y: 1.2, offset: 1.2 }, // over bare floor: idle must not get free yield
   hazards: [
     { type: 'spikes', wall: 'floor', from: -1.8, to: 2.8, z: [-2.5, 2.5] },
     { type: 'saw', wall: 'left', at: -2.2, z: [-2.5, 0.6], radius: 1.1, dir: 1 },

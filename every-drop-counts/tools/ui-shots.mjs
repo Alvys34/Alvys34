@@ -63,6 +63,9 @@ async function open(page, query = '') {
   await page.waitForFunction(() => window.__edc && window.__edc.getState, null, { timeout: 90000 });
   await page.evaluate(() => window.__edc.ready);
   await page.evaluate(() => document.fonts && document.fonts.ready);
+  // software WebGL renders ~1 frame/s on a loaded machine: CSS transitions/animations would be
+  // captured mid-way, so screenshots show end states (the real game runs them at 60 fps)
+  await page.addStyleTag({ content: '*,*::before,*::after{transition-duration:0s!important;transition-delay:0s!important;animation:none!important}' });
   await sleep(400);
 }
 const state = (page) => page.evaluate(() => window.__edc.getState());
@@ -150,13 +153,14 @@ async function flow(browser) {
   await key(page, 'Enter', 600);
   check(await topScreen(page) === 'settings', 'pause -> settings');
   for (let i = 0; i < 4; i++) await key(page, 'ArrowLeft', 120); // master 80 -> 60
-  for (let i = 0; i < 8; i++) await key(page, 'ArrowDown', 120); // -> blood colour
+  for (let i = 0; i < 6; i++) await key(page, 'ArrowDown', 120); // -> blood colour
   check((await focusedText(page) || '').startsWith('Blood colour'), 'settings nav reaches Blood colour');
   await key(page, 'ArrowRight', 300); // green
   await shot(page, 'flow-05-settings-changed');
   await key(page, 'Escape', 500);
   check(await topScreen(page) === 'pause', 'Esc from settings -> pause');
-  await key(page, 'ArrowDown', 150); await key(page, 'ArrowDown', 150); await key(page, 'ArrowDown', 150);
+  check((await focusedText(page) || '').startsWith('Settings'), 'pause restores focus to Settings');
+  await key(page, 'ArrowDown', 150);
   check((await focusedText(page) || '').startsWith('Quit to menu'), 'focus on Quit to menu');
   await key(page, 'Enter', 500);
   check(await topScreen(page) === 'confirm', 'quit asks for confirmation');

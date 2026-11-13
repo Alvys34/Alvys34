@@ -279,10 +279,10 @@ export function facilityWallCanvas() {
   const rng = makeRng(5);
   const y = (m) => H - m * PPM; // metres above floor -> canvas y
   const t = PPM * 0.3125;
-  drawTiles(g, 0, 0, W, y(6.4), t, t, '#cfe7dc', '#b2d4c5', rng, { accent: '#d9eee4', accentEvery: 13, jitter: 0.03 });
+  drawTiles(g, 0, 0, W, y(6.4), t, t, '#b7d8ca', '#9cc4b3', rng, { accent: '#c3e0d3', accentEvery: 13, jitter: 0.03 });
   g.fillStyle = CSS.mint4; g.fillRect(0, y(6.4), W, PPM * 0.4);
   g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(0, y(6.4), W, 3);
-  drawTiles(g, 0, y(6.0), W, PPM * 5.7, t, t, '#f1e9d6', '#d5c9ad', rng, { accent: '#e6efe6', accentEvery: 11, jitter: 0.03 });
+  drawTiles(g, 0, y(6.0), W, PPM * 5.7, t, t, '#e4dac3', '#c6b999', rng, { accent: '#d8e3d8', accentEvery: 11, jitter: 0.03 });
   g.fillStyle = '#5c8f80'; g.fillRect(0, y(0.3), W, PPM * 0.3);
   g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(0, y(0.3), W, 2);
   grime(g, 0, 0, W, H, rng, { blots: 30, alpha: 0.035, speck: 600 });
@@ -300,7 +300,7 @@ export function facilityWallCanvas() {
 export function floorCanvas() {
   const S = 256; const c = makeCanvas(S, S); const g = c.getContext('2d');
   const rng = makeRng(11);
-  drawTiles(g, 0, 0, S, S, S / 4, S / 4, '#ece3cc', '#cdbf9e', rng, { jitter: 0.025, accent: '#dfe9dd', accentEvery: 5 });
+  drawTiles(g, 0, 0, S, S, S / 4, S / 4, '#d9cfb6', '#b9ab8a', rng, { jitter: 0.025, accent: '#cbd8cb', accentEvery: 5 });
   for (let i = 0; i < 900; i++) {
     g.fillStyle = rng() < 0.5 ? 'rgba(120,130,110,0.10)' : 'rgba(255,255,255,0.18)';
     g.fillRect(rng() * S, rng() * S, 1.2, 1.2);
