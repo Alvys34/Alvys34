@@ -8,10 +8,12 @@
  *
  * Fit: the drum's front opening (2HW x 2HH at z = +HD, the largest thing in perspective) rotated by
  * the drum angle has world half-extents ex = |c|HW + |s|HH, ey = |s|HW + |c|HH. The camera distance
- * is the larger of the vertical/horizontal requirement (+ margin, + a small top reserve for the HUD).
- * It ANTICIPATES rotation (takes the max extent over the angles the drum will sweep in the next
- * ~0.55 s at its current angular speed), zooms OUT quickly and IN slowly (after a short hold), and
- * is hard-clamped so the current extent can never crop. Held still at 0 deg the drum fills the frame;
+ * is the larger of the vertical/horizontal requirement + a small safe margin (2.5 % of the screen,
+ * + 1.2 % for shake at full screenShake). Only the INTERIOR counts: frame, gear rim and facility
+ * crop freely; interior corners may pass under the top-corner HUD panels. It ANTICIPATES rotation
+ * (max extent over the angles swept in the next ~0.7 s), zooms with a critically damped spring whose
+ * speed is capped (out <= 90 %/s, in <= 16 %/s, in only after a 0.5 s hold), and is hard-clamped so
+ * the current extent can never crop. Zoom punch only uses slack above that clamp. Held still at 0 deg the drum fills the frame;
  * while it spins the view settles on the worst-case framing instead of pumping.
  *
  * Motion: idle sway, trauma-based shake (impacts, severs, deaths, explosions), a spring "kick"
@@ -25,12 +27,15 @@ export function createCameraRig(ctx) {
   const { camera, bus, settings } = ctx;
   const HW = TUNABLES.drum.width / 2; const HH = TUNABLES.drum.height / 2; const HD = TUNABLES.drum.depth / 2;
   const FOV = 34;
-  const MARGIN = 0.6;       // metres of frame kept around the interior (absorbs shake/punch)
-  const TOP_RESERVE = 0.04; // fraction of the screen height kept for the HUD strip
-  const LOOKAHEAD = 0.55;   // s of rotation anticipated
+  // Fit the drum INTERIOR (front opening) only: frame, gear rim and facility may crop freely.
+  const MARGIN_FRAC = 0.025; // safe margin, fraction of the visible half-extent (~2.5 % of screen)
+  const SHAKE_FRAC = 0.012;  // extra room for shake/kick at full screenShake
+  const TOP_RESERVE = 0;     // HUD sits in the top corners; interior corners may pass under it briefly
+  const LOOKAHEAD = 0.7;     // s of rotation anticipated (zoom-out starts before it is needed)
+  const ZOOM_OUT_RATE = 0.9; // max relative zoom speed (fraction of distance per second)
+  const ZOOM_IN_RATE = 0.16;
   // 1 = fully adaptive (tightest framing per angle), 0 = always the worst-case (diagonal) framing.
-  // Slightly below 1 softens the zoom in/out while rocking. settings.cameraZoomRange overrides.
-  const ZOOM_RANGE = 0.85;
+  const ZOOM_RANGE = 1;
   const DIAG = Math.hypot(HW, HH);
   camera.fov = FOV;
   camera.near = 0.5; camera.far = 220;
@@ -39,7 +44,7 @@ export function createCameraRig(ctx) {
   let dist = 0; let holdT = 0; let snap = true;
   let trauma = 0; let punch = 0; let t = 0;
   let kx = 0; let ky = 0; let kvx = 0; let kvy = 0;
-  let curH = 1; let lastReq = 0;
+  let curH = 1; let lastReq = 0; let zvel = 0; let marginFrac = MARGIN_FRAC;
 
   const shakeAmount = () => {
     const v = settings.screenShake;
@@ -56,8 +61,8 @@ export function createCameraRig(ctx) {
   function required(ex, ey) {
     const tv = Math.tan((camera.fov * Math.PI) / 360);
     const th = tv * camera.aspect;
-    const H = (ey + MARGIN) / (1 - TOP_RESERVE);
-    return Math.max(H / tv, (ex + MARGIN) / th);
+    const keep = 1 - marginFrac - TOP_RESERVE;
+    return Math.max(ey / keep / tv, ex / keep / th);
   }
   const e2 = [0, 0];
 
@@ -85,6 +90,7 @@ export function createCameraRig(ctx) {
   function fit(dt, state) {
     const theta = ctx.drumAngle;
     const w = state && state.drum ? state.drum.omega : 0;
+    marginFrac = MARGIN_FRAC + SHAKE_FRAC * shakeAmount();
     extents(theta, e2);
     const need = required(e2[0], e2[1]);
     // anticipate where the drum is going
@@ -99,14 +105,19 @@ export function createCameraRig(ctx) {
     const worst = required(DIAG, DIAG);
     const target = Math.max(need, worst + (required(ex, ey) - worst) * zr);
     lastReq = need;
-    if (snap || dist <= 0) { dist = target; snap = false; holdT = 0.6; } else if (target > dist) {
-      dist += (target - dist) * (1 - Math.exp(-dt / 0.12));
-      holdT = 0.6;
-    } else {
-      holdT -= dt;
-      if (holdT <= 0) dist += (target - dist) * (1 - Math.exp(-dt / 1.1));
+    if (snap || dist <= 0) { dist = target; snap = false; holdT = 0.5; zvel = 0; } else if (dt > 0) {
+      // critically damped spring on distance, with a capped zoom speed (no lurches)
+      let goal = dist;
+      if (target > dist) { goal = target; holdT = 0.5; } else { holdT -= dt; if (holdT <= 0) goal = target; }
+      const out = goal > dist;
+      const wn = out ? 9 : 2.2;
+      zvel += ((goal - dist) * wn * wn - 2 * wn * zvel) * dt;
+      const cap = dist * (out ? ZOOM_OUT_RATE : ZOOM_IN_RATE);
+      if (zvel > cap) zvel = cap; else if (zvel < -cap) zvel = -cap;
+      dist += zvel * dt;
+      if (!out && dist < goal) { dist = goal; zvel = 0; }
     }
-    if (dist < need) dist = need; // never crop
+    if (dist < need) { dist = need; if (zvel < 0) zvel = 0; } // never crop the interior
     const tv = Math.tan((camera.fov * Math.PI) / 360);
     curH = dist * tv;
   }
@@ -131,12 +142,13 @@ export function createCameraRig(ctx) {
       const A = shakeAmount();
       const s = trauma * trauma * A;
       const n = (k) => Math.sin(t * (31 + k * 7.3) + k * 1.7) * 0.6 + Math.sin(t * (17.3 + k * 3.1) + k * 4.1) * 0.4;
-      const sway = 0.07 * A;
-      const kxs = Math.max(-0.3, Math.min(0.3, kx * A)); const kys = Math.max(-0.3, Math.min(0.3, ky * A));
+      const sway = 0.05 * A;
+      const kxs = Math.max(-0.15, Math.min(0.15, kx * A)); const kys = Math.max(-0.15, Math.min(0.15, ky * A));
       const cy = TOP_RESERVE * curH;
-      const z = HD + dist * (1 - 0.035 * punch * A);
-      const ox = Math.sin(t * 0.21 * Math.PI * 2 * 0.25) * sway + n(1) * s * 0.22 + kxs;
-      const oy = Math.sin(t * 0.17 * Math.PI * 2 * 0.25 + 1.3) * sway * 0.6 + n(2) * s * 0.22 + kys;
+      // zoom punch only uses the slack above the no-crop distance
+      const z = HD + Math.max(lastReq, dist * (1 - 0.03 * punch * A));
+      const ox = Math.sin(t * 0.21 * Math.PI * 2 * 0.25) * sway + n(1) * s * 0.14 + kxs;
+      const oy = Math.sin(t * 0.17 * Math.PI * 2 * 0.25 + 1.3) * sway * 0.6 + n(2) * s * 0.14 + kys;
       camera.position.set(ox, cy + oy, z);
       camera.lookAt(ox * 0.6 + n(3) * s * 0.06, cy + oy * 0.6 + n(4) * s * 0.06, 0);
       camera.rotation.z += n(5) * s * 0.012;
