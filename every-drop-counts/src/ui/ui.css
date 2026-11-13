@@ -1,0 +1,48 @@
+/* BASELINE UI styles (temporary). Medical-corporate: white, mint accent, red only for blood values. */
+.edc-ui { position: fixed; inset: 0; pointer-events: none; font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; color: #24413a; z-index: 10; }
+.edc-hud { position: absolute; inset: 0; }
+.edc-hud-left { position: absolute; left: 16px; top: 14px; background: rgba(255,255,255,0.86); border-radius: 14px; padding: 10px 14px; min-width: 220px; box-shadow: 0 3px 12px rgba(0,0,0,0.12); }
+.edc-liters { font-size: 34px; font-weight: 700; color: #c4001a; line-height: 1; }
+.edc-liters-u { font-size: 18px; color: #8a2a33; }
+.edc-gauge { position: relative; height: 12px; margin-top: 8px; background: #e6efe9; border-radius: 6px; overflow: visible; }
+.edc-gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #a3001a, #e0102e); border-radius: 6px; transition: width 0.15s; }
+.edc-gauge-marks i { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1px; background: #24413a; border-radius: 2px; }
+.edc-quota { display: flex; gap: 10px; margin-top: 6px; font-size: 13px; color: #6b8079; }
+.edc-quota span { filter: grayscale(1); opacity: 0.6; }
+.edc-quota span.got { filter: none; opacity: 1; color: #c4001a; font-weight: 700; }
+.edc-hud-mid { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); text-align: center; max-width: 52vw; }
+.edc-level { display: inline-block; background: rgba(255,255,255,0.86); padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 15px; }
+.edc-pa { margin-top: 8px; font-size: 15px; background: rgba(36,65,58,0.82); color: #eafff6; padding: 6px 12px; border-radius: 10px; display: inline-block; }
+.edc-pa:empty { display: none; }
+.edc-pa[data-mood="urgent"] { background: rgba(160,20,30,0.85); }
+.edc-hud-right { position: absolute; right: 16px; top: 14px; background: rgba(255,255,255,0.86); border-radius: 14px; padding: 10px 14px; text-align: right; min-width: 150px; box-shadow: 0 3px 12px rgba(0,0,0,0.12); }
+.edc-clock { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.edc-clock.warn { color: #c4001a; }
+.edc-donors { font-size: 15px; margin-top: 2px; }
+.edc-slam { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 6px; font-size: 13px; font-weight: 700; color: #8aa098; }
+.edc-slam.ready { color: #1f9d73; }
+.edc-slam-bar { width: 80px; height: 8px; background: #e6efe9; border-radius: 4px; overflow: hidden; }
+.edc-slam-bar > div { height: 100%; width: 100%; background: #5cc9a4; }
+.edc-combo { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-size: 40px; font-weight: 800; color: #fff; text-shadow: 0 2px 0 #a3001a, 0 0 18px rgba(196,0,26,0.6); letter-spacing: 1px; }
+.edc-combo.pop { animation: edc-pop 0.35s ease-out; }
+@keyframes edc-pop { from { transform: translateX(-50%) scale(1.6); } to { transform: translateX(-50%) scale(1); } }
+.edc-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(223,243,234,0.55); pointer-events: auto; }
+.edc-overlay[hidden] { display: none; }
+.edc-card { background: #fff; border-radius: 20px; padding: 26px 34px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.18); max-width: 90vw; }
+.edc-title { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
+.edc-sub { color: #5c7a70; margin-top: 4px; }
+.edc-press { margin-top: 22px; font-size: 20px; color: #1f9d73; animation: edc-blink 1.4s infinite; }
+.edc-help { margin-top: 14px; font-size: 13px; color: #6b8079; }
+@keyframes edc-blink { 50% { opacity: 0.35; } }
+.edc-stars { font-size: 40px; margin: 10px 0; }
+.edc-stars .dim { filter: grayscale(1); opacity: 0.3; }
+.edc-report { margin: 8px auto 14px; border-collapse: collapse; font-size: 15px; text-align: left; }
+.edc-report td { padding: 3px 12px; border-bottom: 1px solid #eef3f0; }
+.edc-report td:last-child { text-align: right; font-weight: 700; }
+.edc-buttons { display: flex; gap: 12px; justify-content: center; }
+.edc-buttons button { font: inherit; font-weight: 700; font-size: 16px; padding: 10px 20px; border-radius: 999px; border: 2px solid #5cc9a4; background: #fff; color: #24413a; cursor: pointer; }
+.edc-buttons button:hover, .edc-buttons button:focus { background: #5cc9a4; color: #fff; outline: none; }
+
+.edc-drop { display: inline-block; width: 0.7em; height: 0.7em; margin-right: 0.25em; background: #c4001a; border-radius: 0 50% 50% 50%; transform: rotate(45deg); vertical-align: -0.05em; }
+.edc-drop.big { width: 0.8em; height: 0.8em; margin: 0 0.25em; }
+.edc-drop.dim { background: #d7e1dc; }

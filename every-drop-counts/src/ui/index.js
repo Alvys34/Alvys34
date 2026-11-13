@@ -83,7 +83,7 @@ export function createUI({ root, bus }) {
         quotaKey = qk;
         gaugeMax = Math.max(1, (s.quota[2] || 1) * 1.15);
         marks.innerHTML = s.quota.map((v, i) => `<i style="left:${(v / gaugeMax) * 100}%" title="${i + 1}"></i>`).join('');
-        quotaEl.innerHTML = s.quota.map((v, i) => `<span data-i="${i}">\u{1F4A7}${'' + v}</span>`).join('');
+        quotaEl.innerHTML = s.quota.map((v, i) => `<span data-i="${i}"><i class="edc-drop"></i>${v}</span>`).join('');
       }
       gaugeFill.style.width = `${Math.min(100, (s.liters / gaugeMax) * 100)}%`;
       quotaEl.querySelectorAll('span').forEach((sp, i) => sp.classList.toggle('got', s.liters >= s.quota[i]));
@@ -102,7 +102,7 @@ export function createUI({ root, bus }) {
       if (comboTimer <= 0) comboEl.textContent = '';
     },
     showResults(r, { onRetry, onNext, hasNext }) {
-      const stars = '\u{1F4A7}'.repeat(r.stars) + '<span class="dim">' + '\u{1F4A7}'.repeat(3 - r.stars) + '</span>';
+      const stars = '<i class="edc-drop big"></i>'.repeat(r.stars) + '<i class="edc-drop big dim"></i>'.repeat(3 - r.stars);
       const title = r.result === 'complete' ? 'SHIFT REPORT' : r.result === 'timeout' ? 'SHIFT REPORT — QUOTA MISSED' : 'SHIFT REPORT — INCOMPLETE';
       results.innerHTML = `<div class="edc-card"><div class="edc-title">${title}</div>
         <div class="edc-stars">${stars}</div>
