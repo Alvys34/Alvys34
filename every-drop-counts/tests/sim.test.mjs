@@ -72,7 +72,7 @@ test('full shift 2 (rock): contract events + pan, blood conservation', async () 
     if (e.type === 'donor:death') assert.ok(['cut', 'impale', 'crush', 'grind', 'impact', 'drown', 'explode', 'bleedout'].includes(e.payload.cause));
   }
   // every contract-named event we emit uses a contract name or a documented extension
-  const extensions = new Set(['donor:speak', 'part:dissolve', 'grinder:swallow', 'crusher:stroke']);
+  const extensions = new Set(['donor:speak', 'part:dissolve', 'grinder:swallow', 'crusher:stroke', 'donor:drowning', 'bonus:withheld', 'inspector:exit']);
   for (const t of types) assert.ok(CONTRACT_EVENTS.has(t) || extensions.has(t), `unexpected event type ${t}`);
   sim.dispose();
 });

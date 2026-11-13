@@ -12,6 +12,7 @@ import { PAL, sharedMaterials, makeRng } from '../environment/palette.js';
 import { builder, rbox } from '../environment/geo.js';
 import { makeCanvas, toTexture, stripeTexture } from '../environment/textures.js';
 import { getSigns } from '../environment/index.js';
+import { selfLitMaterial } from './hazards.js';
 
 export const PROP_BUILDERS = {
   oxygenTank: buildTank,
@@ -141,28 +142,46 @@ export function createPropViews(ctx) {
 
 function makeKit(ctx, M, track) {
   const { THREE } = ctx;
-  const stripes = track(new THREE.MeshStandardMaterial({ map: track(stripeTexture(THREE, { stripes: 4 })), roughness: 0.5 }));
+  const stripes = track(selfLitMaterial(THREE, new THREE.MeshStandardMaterial({ map: track(stripeTexture(THREE, { stripes: 4 })), roughness: 0.5 }), { value: 0.4 }, 'propstripes'));
   // crack layers for the safety sphere (R = first hit, G = second, B = third)
-  const cc = makeCanvas(512, 256); const g = cc.getContext('2d');
+  const cc = makeCanvas(512, 256); let g = cc.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, 512, 256);
   const rng = makeRng(5);
+  // each crack = a dark rim (channel ~0.45) under a bright core (1.0): white-on-dark lines read on a
+  // pale wall AND on a red one at gameplay zoom (sphere ~100 px across at 720p)
   const crack = (chan, n, x0, y0) => {
-    g.strokeStyle = chan; g.lineWidth = 2.2; g.lineCap = 'round';
+    const paths = [];
     for (let k = 0; k < n; k++) {
       let x = x0 + (rng() - 0.5) * 30; let y = y0 + (rng() - 0.5) * 30;
       let a = rng() * Math.PI * 2;
-      g.beginPath(); g.moveTo(x, y);
-      const segs = 6 + Math.floor(rng() * 6);
-      for (let s = 0; s < segs; s++) { a += (rng() - 0.5) * 1.1; x += Math.cos(a) * 12; y += Math.sin(a) * 12; g.lineTo(x, y); }
-      g.stroke();
+      const pts = [[x, y]];
+      const segs = 5 + Math.floor(rng() * 5);
+      for (let s = 0; s < segs; s++) { a += (rng() - 0.5) * 1.1; x += Math.cos(a) * 16; y += Math.sin(a) * 16; pts.push([x, y]); }
+      paths.push(pts);
+    }
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const [w, c] of [[11, `rgba(${chan},0.45)`], [4.5, `rgba(${chan},1)`]]) {
+      g.strokeStyle = c; g.lineWidth = w;
+      for (const pts of paths) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (const p of pts) g.lineTo(p[0], p[1]); g.stroke(); }
     }
   };
-  g.globalCompositeOperation = 'lighter';
-  crack('rgb(255,0,0)', 7, 130, 120);
-  crack('rgb(0,255,0)', 9, 360, 90); crack('rgb(0,255,0)', 5, 140, 120);
-  crack('rgb(0,0,255)', 10, 250, 190); crack('rgb(0,0,255)', 8, 450, 160); crack('rgb(0,0,255)', 8, 40, 60);
+  // per channel: rims first, then cores, without 'lighter' so a crossing never reads as "core"
+  const layer = (draw) => { const c2 = makeCanvas(512, 256); const g2 = c2.getContext('2d'); const og = g; g = g2; draw(); g = og; return c2; };
+  const R = layer(() => { crack('255,255,255', 6, 130, 120); });
+  const G = layer(() => { crack('255,255,255', 7, 360, 90); crack('255,255,255', 4, 140, 120); });
+  const Bc = layer(() => { crack('255,255,255', 8, 250, 190); crack('255,255,255', 6, 450, 160); crack('255,255,255', 6, 40, 60); });
+  {
+    const img = g.getImageData(0, 0, 512, 256);
+    const dr = R.getContext('2d').getImageData(0, 0, 512, 256).data;
+    const dg = G.getContext('2d').getImageData(0, 0, 512, 256).data;
+    const db = Bc.getContext('2d').getImageData(0, 0, 512, 256).data;
+    // white strokes over transparent: luminance x alpha = 0.45 (rim) / 1 (core)
+    for (let i = 0; i < img.data.length; i += 4) { img.data[i] = dr[i + 3]; img.data[i + 1] = dg[i + 3]; img.data[i + 2] = db[i + 3]; img.data[i + 3] = 255; }
+    g.putImageData(img, 0, 0);
+  }
   const crackTex = track(toTexture(THREE, cc, { srgb: false, aniso: 4 }));
-  return { M, stripes, crackTex, signs: getSigns(ctx), track };
+  const hazPaint = track(selfLitMaterial(THREE, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.25 }), { value: 0.45 }, 'props'));
+  return { M, stripes, crackTex, hazPaint, signs: getSigns(ctx), track };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -232,9 +251,16 @@ function buildSphere(ctx, view, kit) {
   const { THREE } = ctx;
   const R = view.radius || 1.0;
   const group = new THREE.Group();
-  // shell: faint glass + fresnel rim + crack layers (one shader, additive)
+  // Shell (readability, PLAYTEST-1 B2): a frosted pale-cyan bubble (cool against a red wall, clear in
+  // the middle so the Inspector shows), a screen-facing hazard-orange SAFETY RIM with black dashes
+  // around the silhouette, a gloss spot, and white-on-dark crack lines per hit. Normal-blended and
+  // drawn after the pool, so it reads the same half-submerged. One draw.
   const shellMat = new THREE.ShaderMaterial({
-    uniforms: { cracks: { value: 0 }, crackMap: { value: kit.crackTex }, tint: { value: new THREE.Color(0xe8fbff) } },
+    uniforms: {
+      cracks: { value: 0 }, crackMap: { value: kit.crackTex }, tint: { value: new THREE.Color(0xd2f4ff) },
+      orange: { value: new THREE.Color(PAL.amber).lerp(new THREE.Color(0xff7a00), 0.6).multiplyScalar(1.2) },
+      ink: { value: new THREE.Color(PAL.black) },
+    },
     vertexShader: /* glsl */`
       varying vec3 vN; varying vec3 vV; varying vec2 vUv;
       void main() {
@@ -244,34 +270,46 @@ function buildSphere(ctx, view, kit) {
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */`
-      uniform float cracks; uniform sampler2D crackMap; uniform vec3 tint;
+      uniform float cracks; uniform sampler2D crackMap; uniform vec3 tint; uniform vec3 orange; uniform vec3 ink;
       varying vec3 vN; varying vec3 vV; varying vec2 vUv;
       void main() {
-        float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-        float rim = pow(f, 2.6) * 0.75 + 0.035;
+        vec3 N = normalize(vN);
+        float f = 1.0 - abs(dot(N, normalize(vV)));
+        // frosted body: thin in the middle, thicker toward the edge; frostier as it cracks
+        vec3 col = tint;
+        float a = 0.08 + 0.1 * cracks + 0.34 * f * f;
+        // dark keyline just inside the rim, then the dashed orange safety rim (outer ~13 % of radius)
+        float rimB = smoothstep(0.47, 0.53, f);
+        float key = smoothstep(0.38, 0.46, f) * (1.0 - rimB);
+        col = mix(col, ink, key * 0.85); a = max(a, key * 0.7);
+        float ang = atan(N.y, N.x) / 6.2831853;
+        float dash = step(0.8, fract(ang * 14.0));
+        col = mix(col, mix(orange, ink, dash), rimB); a = mix(a, 0.96, rimB);
+        // gloss spot (view space)
+        float spec = pow(max(0.0, dot(N, normalize(vec3(-0.45, 0.6, 0.66)))), 30.0);
+        col = mix(col, vec3(1.0), spec * 0.85); a = max(a, spec * 0.8);
+        // cracks: stage 1 (R), 2 (G), 3 (B); 0.45 = dark rim, 1 = bright core
         vec3 c = texture2D(crackMap, vUv).rgb;
-        float cr = c.r * step(0.05, cracks) + c.g * step(0.45, cracks) + c.b * step(0.8, cracks);
-        // a highlight that stays in view space (gloss)
-        float spec = pow(max(0.0, dot(normalize(vN), normalize(vec3(-0.45, 0.6, 0.66)))), 40.0) * 0.9;
-        gl_FragColor = vec4(tint * (rim + spec + cr * 0.9), 1.0);
+        float cv = max(c.r * step(0.05, cracks), max(c.g * step(0.45, cracks), c.b * step(0.8, cracks)));
+        float core = smoothstep(0.75, 0.92, cv);
+        float edge = smoothstep(0.2, 0.4, cv) * (1.0 - core);
+        col = mix(col, ink, edge * 0.9); col = mix(col, vec3(1.0), core);
+        a = max(a, max(core, edge * 0.85));
+        gl_FragColor = vec4(col, a);
       }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+    transparent: true, depthWrite: false, side: THREE.FrontSide,
   });
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 20), shellMat);
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 40, 24), shellMat);
   shell.renderOrder = 12;
   group.add(shell);
-  // faint tinted body so the ball reads against pale walls
-  const tintMat = new THREE.MeshStandardMaterial({ color: 0xcff3ee, transparent: true, opacity: 0.06, roughness: 0.05, metalness: 0.1, depthWrite: false });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(R * 0.995, 24, 16), tintMat);
-  body.renderOrder = 11;
-  group.add(body);
-  // hazard-yellow structural hoops + axle hubs (show the roll)
+  // hazard-yellow structural hoops + axle hubs (show the roll), self-lit so they stay yellow under
+  // the red emergency light
   const B = builder(THREE, { colors: true });
-  B.add(new THREE.TorusGeometry(R * 1.005, 0.045, 6, 48), { color: PAL.hazard });
-  B.add(new THREE.TorusGeometry(R * 1.005, 0.045, 6, 48), { rot: [0, Math.PI / 2, 0], color: PAL.hazard });
-  for (const s of [-1, 1]) B.add(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12), { pos: [0, 0, s * R], rot: [Math.PI / 2, 0, 0], color: PAL.steelDark });
+  B.add(new THREE.TorusGeometry(R * 1.01, 0.06, 6, 48), { color: PAL.hazard });
+  B.add(new THREE.TorusGeometry(R * 1.01, 0.06, 6, 48), { rot: [0, Math.PI / 2, 0], color: PAL.hazard });
+  for (const s of [-1, 1]) B.add(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12), { pos: [0, 0, s * R], rot: [Math.PI / 2, 0, 0], color: PAL.black });
   const hoopGeo = B.build();
-  const hoops = new THREE.Mesh(hoopGeo, kit.M.paintedMetal);
+  const hoops = new THREE.Mesh(hoopGeo, kit.hazPaint);
   hoops.castShadow = true;
   group.add(hoops);
   let lastCr = 0;
@@ -280,16 +318,15 @@ function buildSphere(ctx, view, kit) {
     update(v) {
       const cr = v.cracks ?? (v.maxHits ? (v.hits || 0) / v.maxHits : 0);
       shellMat.uniforms.cracks.value = cr;
-      tintMat.opacity = 0.06 + cr * 0.1;
       lastCr = cr;
     },
     onRemove(v) {
       const p = group.position;
-      if (!v || v.shattered !== false) kit.burst(p.x, p.y, p.z, 70, 6, R * 0.11, [0xe9fbff, 0xd5f2ee, 0xffffff, PAL.hazard]);
+      if (!v || v.shattered !== false) kit.burst(p.x, p.y, p.z, 70, 6, R * 0.11, [0xe9fbff, 0xd5f2ee, 0xffffff, PAL.hazard, PAL.amber]);
       void lastCr;
     },
     dispose() {
-      shellMat.dispose(); tintMat.dispose(); shell.geometry.dispose(); body.geometry.dispose(); hoopGeo.dispose();
+      shellMat.dispose(); shell.geometry.dispose(); hoopGeo.dispose();
     },
   };
 }

@@ -39,11 +39,15 @@ export function createRunners(atlas, { HW, HH, HD }, cap) {
     }
   }
 
-  const width = (v) => 0.022 + 0.05 * Math.sqrt(v);
+  // readability (LOCAL-REPORT-1 §2.3): few, THICK, short drips with a round bead at the head — many
+  // long thin trails read as hair / veins at gameplay zoom. Trail = 0.75 w, bead = 1.7 w.
+  const width = (v) => 0.05 + 0.07 * Math.sqrt(v);
+  const MAX_AGE = 4.5;
 
-  /** env: { g, ux, uy, w2, t } */
+  /** env: { g, ux, uy, w2, t, level } (level: pool surface height along world-up, drum-local; -1e9 = none) */
   function update(dt, env, onDrip) {
     const { g, ux, uy, w2, t } = env;
+    const level = env.level ?? -1e9;
     let i = 0;
     while (i < count) {
       const s = surf[i]; let a = A[i]; let b = B[i];
@@ -51,6 +55,8 @@ export function createRunners(atlas, { HW, HH, HD }, cap) {
       // drum-local position of the runner and the effective gravity there
       let x; let y;
       if (s <= 1) { x = a - HW; y = b - HH; } else if (s <= 3) { x = a - HW; y = s === SURF.FLOOR ? -HH : HH; } else { x = s === SURF.LEFT ? -HW : HW; y = a - HH; }
+      // under the pool a drip just dissolves (no worm-like trails crawling around inside the liquid)
+      if (ux * x + uy * y < level - 0.05) { kill(i); continue; }
       const gx = -g * ux + w2 * x; const gy = -g * uy + w2 * y;
       let ga; let gb = 0; let gn = 0;
       if (s <= 1) { ga = gx; gb = gy; } else if (s === SURF.FLOOR) { ga = gx; gn = gy; } else if (s === SURF.CEIL) { ga = gx; gn = -gy; } else if (s === SURF.LEFT) { ga = gy; gn = gx; } else { ga = gy; gn = -gx; }
@@ -76,20 +82,21 @@ export function createRunners(atlas, { HW, HH, HD }, cap) {
         const cw = Math.cos(wob); const sw = Math.sin(wob);
         const da = da0 * cw - db0 * sw; const db = da0 * sw + db0 * cw;
         a += da * sp * dt; b += db * sp * dt;
-        vol[i] -= sp * dt * (0.26 + w * 2.0);
+        vol[i] -= sp * dt * (0.55 + w * 2.5);
         // lay down a streak segment once it moved about a width
         const sa = a - LA[i]; const sb = b - LB[i];
         const sl = Math.hypot(sa, sb);
         if (sl > w * 0.8) {
-          atlas.stamp(s, (a + LA[i]) * 0.5, (b + LB[i]) * 0.5, sa / sl, sb / sl, sl * 0.5 + w * 0.5, w, 0.95, 1, 1, sd[i]);
+          const tw = w * 0.75;
+          atlas.stamp(s, (a + LA[i]) * 0.5, (b + LB[i]) * 0.5, sa / sl, sb / sl, sl * 0.5 + tw * 0.5, tw, 0.9, 1, 1, sd[i]);
           LA[i] = a; LB[i] = b;
         }
       }
       const r = REG[s];
       const out = a < 0.02 || b < 0.02 || a > r[2] - 0.02 || b > r[3] - 0.02;
-      if (vol[i] <= 0.035 || out || age[i] > 14) {
-        // final bead where it stopped
-        if (!out) atlas.stamp(s, a, b, 1, 0, w * 1.5, w * 1.5, 1.4, 4, 1, sd[i]);
+      if (vol[i] <= 0.04 || out || age[i] > MAX_AGE) {
+        // the round head: a fat bead where it stopped
+        if (!out) atlas.stamp(s, a, b, 1, 0, w * 1.7, w * 1.7, 1.6, 4, 1, sd[i]);
         kill(i); continue;
       }
       A[i] = a; B[i] = b;

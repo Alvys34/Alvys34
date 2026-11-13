@@ -10,8 +10,9 @@
  *
  *   createPost(ctx) -> { render(dt, state), resize(w, h), setQuality(q), stats(), dispose() }
  *
- * Escalation with pool fill (GDD §8): cool clinical white balance -> sickly, red-shifted; vignette,
- * chromatic aberration (medium/high) and grain grow as fill -> 1.
+ * Escalation with pool fill (GDD §8): clean, cool clinical grade (neutral-cool edge darkening, no red)
+ * until ~30 % fill; then EMERG_FROM..EMERG_TO (raw fill, same curve as lighting.js) blends in a
+ * red-shifted, slightly more saturated grade, a slow-pulsing blood-coloured edge, CA and grain.
  * Accents: slam = damage flash (exposure pop + red edges); >= 2 simultaneous severs (hit-stop) =
  * brief desaturate-except-blood; slow-mo kill streaks (same rule as src/core/feel.js) = desaturate
  * + radial blur for the slow-mo duration; big combos (x4+) = radial blur pulse.
@@ -22,6 +23,11 @@
 import { bloodUniforms } from './blood/palette.js';
 import { TUNABLES } from '../core/tunables.js';
 import { floatTargetsOK } from './quality.js';
+
+/** fill-driven emergency curve (raw state.pool.fill), shared with environment/lighting.js */
+export const EMERG_FROM = 0.28;
+export const EMERG_TO = 0.52;
+function smoothstep(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 
 const VS = 'varying vec2 vUv; void main(){ vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
@@ -105,7 +111,8 @@ export function createPost(ctx) {
     uBloom: { value: 0.0 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
     uFill: { value: 0 }, uVignette: { value: 0.22 }, uCA: { value: 0 }, uGrain: { value: 0.015 },
     uFlash: { value: 0 }, uRedEdge: { value: 0 }, uDesat: { value: 0 }, uRadial: { value: 0 }, uExposure: { value: 1 },
-    uBloodKey: bloodUniforms.uBloodKey, uBloodFresh: bloodUniforms.uBloodFresh,
+    uBloodKey: bloodUniforms.uBloodKey, uBloodFresh: bloodUniforms.uBloodFresh, uBloodDeep: bloodUniforms.uBloodDeep,
+    uEmerg: { value: 0 }, uEdge: { value: 0 }, uPulse: { value: 1 },
   };
   const composite = mk(/* glsl */`
     uniform float toneMappingExposure;
@@ -121,7 +128,8 @@ export function createPost(ctx) {
     uniform float uBloom; uniform float uTime; uniform vec2 uRes;
     uniform float uFill; uniform float uVignette; uniform float uCA; uniform float uGrain;
     uniform float uFlash; uniform float uRedEdge; uniform float uDesat; uniform float uRadial; uniform float uExposure;
-    uniform vec3 uBloodKey; uniform vec3 uBloodFresh;
+    uniform vec3 uBloodKey; uniform vec3 uBloodFresh; uniform vec3 uBloodDeep;
+    uniform float uEmerg; uniform float uEdge; uniform float uPulse;
     varying vec2 vUv;
     float hash(vec2 p) { p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
     void main() {
@@ -147,23 +155,25 @@ export function createPost(ctx) {
       float sat = m > 1e-4 ? (m - min(col.r, min(col.g, col.b))) / m : 0.0;
       float bl = smoothstep(0.86, 0.97, dot(normalize(col + 1e-5), uBloodKey)) * smoothstep(0.35, 0.7, sat);
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      // grade: clinical cool -> sickly, red-shifted with fill
-      float f = smoothstep(0.04, 0.9, uFill);
-      vec3 wb = mix(vec3(0.97, 1.0, 1.04), vec3(1.03, 0.99, 0.95), f);
+      // grade: clean clinical mint until ~1/3 fill, then "emergency" (uEmerg, from the raw pool fill):
+      // a cool -> slightly magenta-red white balance and a touch MORE saturation (desaturating read
+      // as sepia / dirt); the red itself comes from the lights (environment/lighting.js)
+      float f = uEmerg;
+      vec3 wb = mix(vec3(0.97, 1.0, 1.04), vec3(1.05, 0.97, 0.99), f);
       col *= wb;
-      col = mix(vec3(lum), col, mix(1.04, 0.97, f) + bl * (0.12 + 0.12 * f));
-      col.r += lum * 0.02 * f;
-      col = max(col - vec3(0.003 * f), 0.0) * (1.0 + 0.04 * f); // keep it crisp: slight contrast, no mud
+      col = mix(vec3(lum), col, mix(1.04, 1.07, f) + bl * (0.12 + 0.1 * f));
+      col = max(col - vec3(0.004 * f), 0.0) * (1.0 + 0.06 * f); // keep it crisp: slight contrast, no mud
       // accents: desaturate everything except blood
       col = mix(col, vec3(lum) * vec3(1.0, 1.0, 1.04), uDesat * (1.0 - bl));
       col *= uExposure;
       col = acesFilmic(col);
-      // display space
+      // display space: a soft COOL-neutral darkening at the edges (no warm/pink cast at rest), and a
+      // blood-coloured edge only once the emergency starts (or on a slam)
       float r = length(d * vec2(1.0, 0.82)) * 2.0;
-      float vig = smoothstep(0.55, 1.45, r);
-      col *= 1.0 - uVignette * vig;
-      vec3 edgeRed = uBloodFresh * 0.6 + vec3(0.06, 0.0, 0.0);
-      col = mix(col, edgeRed, clamp(vig * (uRedEdge + 0.12 * f * f), 0.0, 0.85));
+      float vig = smoothstep(0.6, 1.5, r);
+      col *= 1.0 - uVignette * vig * mix(vec3(1.0, 0.92, 0.88), vec3(1.0), f);
+      vec3 edgeRed = uBloodFresh * 0.62 + uBloodDeep * 0.15;
+      col = mix(col, edgeRed, clamp(vig * (uRedEdge + 0.32 * uEdge * uPulse), 0.0, 0.85));
       vec4 o = sRGBTransferOETF(vec4(clamp(col, 0.0, 1.0), 1.0));
       float g = hash(uv * uRes + fract(uTime * 7.13) * 91.7) - 0.5;
       o.rgb += g * uGrain;
@@ -283,15 +293,23 @@ export function createPost(ctx) {
     }
 
     const f = Math.min(1, Math.max(0, fill / 0.82));
+    // emergency escalation (raw pool fill): grade follows the lights (environment/lighting.js:
+    // nothing below ~30 %, ~0.8 at 45 % = shift 8's ceiling, full by ~52 %); the blood-coloured
+    // EDGE starts later (~37 %) and reaches full strength near the 0.82 cap
+    const em = smoothstep(EMERG_FROM, EMERG_TO, fill);
+    const edge = smoothstep(0.36, 0.8, fill);
     U.tScene.value = rtScene.texture;
     U.tBloom.value = useBloom ? bloom[0].texture : null;
-    U.uBloom.value = useBloom ? 0.32 + 0.12 * f : 0;
+    U.uBloom.value = useBloom ? 0.32 + 0.12 * em : 0;
     U.uTime.value = time;
     U.uFill.value = f;
+    U.uEmerg.value = em;
+    U.uEdge.value = edge;
+    U.uPulse.value = calm ? 1 : 0.82 + 0.18 * Math.sin(time * 2.2);
     const fl = calm ? 0 : flash; const hs = calm ? 0 : hit; const rd = calm ? 0 : radial;
-    U.uVignette.value = 0.2 + 0.22 * f + 0.1 * fl + 0.12 * slow;
-    U.uCA.value = q.ca ? 0.002 * f * f + 0.003 * fl + 0.002 * rd : 0;
-    U.uGrain.value = q.grain === false ? 0 : 0.01 + 0.018 * f;
+    U.uVignette.value = 0.12 + 0.26 * em + 0.1 * fl + 0.12 * slow;
+    U.uCA.value = q.ca ? 0.002 * em * em + 0.003 * fl + 0.002 * rd : 0;
+    U.uGrain.value = q.grain === false ? 0 : 0.01 + 0.018 * em;
     U.uFlash.value = fl;
     U.uRedEdge.value = 0.55 * fl * fl;
     U.uDesat.value = Math.min(1, (calm ? 0.4 : 0.85) * slow + 0.7 * hs);

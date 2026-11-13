@@ -116,6 +116,8 @@ const RIM = /* glsl */`
     float rim = pow(1.0 - clamp(dot(normal, vdir), 0.0, 1.0), 2.6);
     float alive = 1.0 - max(edcDead(), clamp(vState.z, 0.0, 1.0) * 0.7);
     totalEmissiveRadiance += vec3(1.0, 0.96, 0.9) * rim * (0.06 + 0.32 * alive);
+    // self-lit accessory (damage slot < 0: hard hats) keeps its hue under the emergency light
+    if (vState.x < -0.5) totalEmissiveRadiance += diffuseColor.rgb * 0.55;
   }
 `;
 

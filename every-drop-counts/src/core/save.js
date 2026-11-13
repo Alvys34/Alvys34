@@ -19,13 +19,16 @@ export const SAVE_KEY = 'edc.save.v1';
 export const SCHEMA_VERSION = 1;
 export const OVERTIME_TABLE_SIZE = 10;
 
+/** Verbs the UI teaching prompts count (save.teach[verb] = successful uses). */
+export const TEACH_VERBS = ['rotate', 'brake', 'slam'];
+
 /** raw -> raw upgraders, keyed by the version they upgrade FROM. */
 export const MIGRATIONS = {
   // 1: (raw) => { raw.newField = ...; raw.version = 2; return raw; },
 };
 
 export const SETTING_CHOICES = {
-  quality: ['auto', 'low', 'medium', 'high'],
+  quality: ['low', 'medium', 'high', 'auto'],   // display order: → means more (Auto last)
   screenShake: ['off', 'reduced', 'full'],
   bloodColor: ['red', 'green'],
 };
@@ -51,6 +54,7 @@ export function defaultSave() {
     overtime: [],                         // top-10 [{ liters, time, initials, date }]
     initials: 'OPR',                      // last initials used for the Overtime table
     achievements: {},                     // id -> unlock timestamp (ms)
+    teach: {},                            // optional: verb -> successful uses (UI teaching prompts stop at 3)
     stats: {
       donorsProcessed: 0, litersTotal: 0, shiftsPlayed: 0, shiftsCompleted: 0,
       drownings: 0, limbsSevered: 0, slams: 0, overtimeRuns: 0, secondsOnShift: 0,
@@ -128,6 +132,9 @@ export function sanitizeSave(raw) {
       if (typeof id === 'string' && id.length <= 64) out.achievements[id] = num(ts, Date.now(), 0);
     }
   }
+  if (isObj(raw.teach)) {
+    for (const k of TEACH_VERBS) if (raw.teach[k] != null) out.teach[k] = Math.round(num(raw.teach[k], 0, 0, 99));
+  }
   const st = isObj(raw.stats) ? raw.stats : {};
   for (const k of Object.keys(out.stats)) out.stats[k] = num(st[k], 0, 0);
   return out;
@@ -149,7 +156,11 @@ function migrate(raw) {
   return raw;
 }
 
-/** Last load diagnostics (debug/UI): { status: 'fresh'|'loaded'|'corrupt' } */
+/**
+ * Last load diagnostics (debug/UI): { status: 'fresh'|'loaded'|'corrupt'|'future' }.
+ * 'future' = the save's version is newer than SCHEMA_VERSION: the original text is kept under
+ * `edc.save.v1.future` and the game continues with the sanitised data (the UI shows a toast).
+ */
 export const saveInfo = { status: 'fresh' };
 
 export function loadSave() {
@@ -168,6 +179,11 @@ export function loadSave() {
     }
     if (saveInfo.status === 'corrupt') {
       try { st.setItem(`${SAVE_KEY}.corrupt`, String(text).slice(0, 200000)); } catch { /* ignore */ }
+    } else if (Number.isFinite(raw.version) && raw.version > SCHEMA_VERSION) {
+      // written by a newer build (downgrade): keep the original, continue with what this build understands
+      saveInfo.status = 'future';
+      saveInfo.futureVersion = raw.version;
+      try { st.setItem(`${SAVE_KEY}.future`, String(text).slice(0, 200000)); } catch { /* ignore */ }
     }
   }
   cache = sanitizeSave(migrate(raw));

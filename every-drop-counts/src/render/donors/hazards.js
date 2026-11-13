@@ -13,10 +13,11 @@
  * Builders: HAZARD_BUILDERS[kind] = (ctx, view, kit) => ({ group, update(view, dt, state), dispose? })
  */
 import { PAL, sharedMaterials } from '../environment/palette.js';
-import { bloodColors } from '../blood/palette.js';
+import { bloodColors, bloodUniforms } from '../blood/palette.js';
 import { builder, rbox, cylZ, atlasPlane } from '../environment/geo.js';
 import { stripeTexture, sawBlurCanvas, toTexture } from '../environment/textures.js';
 import { getSigns } from '../environment/index.js';
+import { createOutlineMaterial } from './material.js';
 
 export const HAZARD_BUILDERS = {
   spikes: buildSpikes,
@@ -38,9 +39,28 @@ export function createHazardViews(ctx) {
   const track = (o) => { own.push(o); return o; };
   const stripeTex = track(stripeTexture(THREE, { stripes: 4 }));
   const blurTex = track(toTexture(THREE, sawBlurCanvas()));
+  // Hazard identity (readability on a blood-painted wall, LOCAL-REPORT-1 §2.2): every hazard carries
+  // yellow/black parts that are partly SELF-LIT (their own albedo added as emission, more as the
+  // emergency light turns red) plus a few fully UNLIT yellow/black marks (blade rings, collars,
+  // jaw rims) and a dark ink backing so the silhouette separates from a red wall. Blood decals
+  // only paint the drum walls, never these meshes; under the pool they fade with the liquid.
+  const selfLit = { value: 0.3 };
+  const poolY = { value: -1e9 }; // world y of the pool surface (-1e9 = no pool)
   const kit = {
     M, track: (o) => o, // per-item geometry is disposed by clear() (traverse)
-    stripes: track(new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.48, metalness: 0.1 })),
+    stripes: track(selfLitMaterial(THREE, new THREE.MeshStandardMaterial({ map: stripeTex, roughness: 0.48, metalness: 0.1 }), selfLit, 'stripes')),
+    // vertex-coloured yellow/black machine paint that keeps its hue under the red emergency light
+    hazPaint: track(selfLitMaterial(THREE, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.25 }), selfLit, 'paint')),
+    // fully unlit identity marks (vertex colours): always the same yellow/black on screen, dimmed
+    // below the pool surface (visible but subdued)
+    mark: track(poolDimMaterial(THREE, new THREE.MeshBasicMaterial({ vertexColors: true }), poolY, 'mark')),
+    markYellow: track(poolDimMaterial(THREE, new THREE.MeshBasicMaterial({ color: new THREE.Color(PAL.hazard).multiplyScalar(1.15) }), poolY, 'yellow')),
+    // unlit stripes for the glass-side END FACES: the camera always looks along -z, so a hazard seen
+    // edge-on (its wall turned sideways) still shows this yellow/black end-cap through the glass
+    markStripes: track(poolDimMaterial(THREE, new THREE.MeshBasicMaterial({ map: stripeTex, color: new THREE.Color(1.15, 1.15, 1.15) }), poolY, 'stripes')),
+    ink: track(new THREE.MeshBasicMaterial({ color: 0x0d1012 })),
+    inkHull: track(createOutlineMaterial(THREE, 0.028)),
+    spikeSteel: track(new THREE.MeshStandardMaterial({ color: 0x9aa5a9, metalness: 0.85, roughness: 0.3 })),
     blade: M.blade,
     blur: blurTex,
     signs: getSigns(ctx),
@@ -80,6 +100,10 @@ export function createHazardViews(ctx) {
     onLevel(state) { build(state); },
     update(dt, state) {
       if (state.hazards !== lastHazards) build(state);
+      const em = ctx.environment ? ctx.environment.emergency || 0 : 0;
+      selfLit.value = 0.3 + 0.45 * em;
+      const fx = ctx.poolFx;
+      poolY.value = fx && fx.on ? fx.level + drumGroup.position.y : -1e9;
       for (const it of items) if (it.update) it.update(it.hazard.view, dt, state);
     },
     setQuality() {},
@@ -113,6 +137,55 @@ function mesh(THREE, geo, mat, { cast = true, receive = true } = {}) {
   m.castShadow = cast; m.receiveShadow = receive;
   return m;
 }
+/** MeshStandardMaterial that also EMITS its own albedo x uSelfLit (shared uniform): keeps hazard
+ *  yellow reading as yellow under the red emergency key, still shaded. */
+export function selfLitMaterial(THREE, mat, uniform, key) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSelfLit = uniform;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSelfLit;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uSelfLit;');
+  };
+  mat.customProgramCacheKey = () => `edc-hazard-selflit-${key}`;
+  return mat;
+}
+/** Unlit material that dims + blood-tints below the pool surface (uPoolY: world y, shared). */
+function poolDimMaterial(THREE, mat, poolY, key) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uPoolY = poolY;
+    sh.uniforms.uBloodFresh = bloodUniforms.uBloodFresh;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vEdcWY;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        {
+          vec4 edcW = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            edcW = instanceMatrix * edcW;
+          #endif
+          vEdcWY = (modelMatrix * edcW).y;
+        }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vEdcWY; uniform float uPoolY; uniform vec3 uBloodFresh;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.4 + uBloodFresh * 0.06, smoothstep(uPoolY + 0.04, uPoolY - 0.12, vEdcWY));`);
+  };
+  mat.customProgramCacheKey = () => `edc-hazard-pooldim-${key}`;
+  return mat;
+}
+const MARK_Y = 1.15; // unlit yellow is boosted a little so ACES keeps it bright
+/** Glass-side end cap: a w x h unlit striped plane facing +z (stripes ~0.15 m wide). */
+function endCap(THREE, kit, w, h, x, y, z) {
+  const m = mesh(THREE, scaleUV(new THREE.PlaneGeometry(w, h), w / 0.6, h / 0.6), kit.markStripes, { cast: false, receive: false });
+  m.position.set(x, y, z);
+  return m;
+}
+/** Flat ring (in the xy plane) of `n` alternating yellow / black segments, added to builder B. */
+function dashRing(THREE, B, r0, r1, n, { pos = [0, 0, 0], rot = [0, 0, 0], arc = Math.PI * 2, start = 0 } = {}) {
+  for (let i = 0; i < n; i++) {
+    const a = start + (i / n) * arc;
+    B.add(new THREE.RingGeometry(r0, r1, Math.max(2, Math.round(48 / n)), 1, a, arc / n), { pos, rot, color: i % 2 ? PAL.black : PAL.hazard, shade: i % 2 ? 1 : MARK_Y });
+  }
+}
 
 /** A gang of toothed discs along z (one merged geometry), plus a blur disc on the front blade. */
 function sawGang(ctx, kit, radius, z0, z1) {
@@ -143,32 +216,45 @@ function sawGang(ctx, kit, radius, z0, z1) {
       C.add(new THREE.CircleGeometry(radius * 0.07, 10), { pos: [Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62, z + 0.03], color: 0x3b4447 });
     }
   }
-  // hub: drum through the gang + collars
+  // hub: drum through the gang
   C.add(cylZ(THREE, radius * 0.24, radius * 0.24, depth + 0.04, 18), { pos: [0, 0, (z0 + z1) / 2], color: PAL.gunmetal });
-  C.add(cylZ(THREE, radius * 0.12, radius * 0.12, depth + 0.12, 10), { pos: [0, 0, (z0 + z1) / 2], color: PAL.hazard });
   const bladeMat = kit.blade.clone();
   bladeMat.vertexColors = true;
   const blades = mesh(THREE, kit.track(B.build()), bladeMat);
   const hub = mesh(THREE, kit.track(C.build()), kit.M.paintedMetal);
+  // identity (unlit): a yellow/black dashed band painted on the front blade (shows the spin), the
+  // yellow axle collar, and a thin yellow ring on the rear blade; one draw
+  const zf = z0 + (n - 0.5) * (depth / n);
+  const K = builder(THREE, { colors: true });
+  dashRing(THREE, K, radius * 0.56, radius * 0.74, 8, { pos: [0, 0, zf + 0.05] });
+  K.add(new THREE.CircleGeometry(radius * 0.2, 18), { pos: [0, 0, zf + 0.052], color: PAL.hazard, shade: MARK_Y });
+  K.add(new THREE.CircleGeometry(radius * 0.09, 12), { pos: [0, 0, zf + 0.054], color: PAL.black });
+  K.add(cylZ(THREE, radius * 0.13, radius * 0.13, depth + 0.12, 10), { pos: [0, 0, (z0 + z1) / 2], color: PAL.hazard, shade: MARK_Y });
+  const marks = mesh(THREE, kit.track(K.build()), kit.mark, { cast: false });
   const spin = new THREE.Group();
-  spin.add(blades, hub);
+  spin.add(blades, hub, marks);
+  // ink backing: a dark annulus just behind the gang = a crisp silhouette against a red wall
+  const backGeo = new THREE.RingGeometry(radius * 0.8, radius * 1.1, 40);
+  const back = mesh(THREE, backGeo, kit.ink, { cast: false, receive: false });
+  back.position.z = z0 - 0.06;
   const blurMat = new THREE.MeshBasicMaterial({ map: kit.blur, transparent: true, opacity: 0, depthWrite: false, color: 0xaab4b8 });
   const blurGeo = new THREE.PlaneGeometry(radius * 2.02, radius * 2.02);
   const blur = new THREE.Mesh(blurGeo, blurMat);
-  blur.position.z = z1 + 0.03;
+  blur.position.z = zf + 0.04; // on the front blade, under the painted marks
   blur.renderOrder = 3;
-  const steel = new THREE.Color(0xc6ced2);
+  const steel = new THREE.Color(0xb4bec2);
   let stain = 0;
   return {
-    spin, blur, bladeMat,
+    spin, blur, back, bladeMat,
     update(view, dt, stained = 0) {
       spin.rotation.z = view.angle || 0;
       const sp = Math.abs(view.spin || 0);
       blurMat.opacity = Math.min(0.5, Math.max(0, (sp - 6) / 30));
       blur.rotation.z = (view.angle || 0) * 0.05;
-      stain = Math.min(0.65, stain + stained);
+      // stained steel, but never blood-red all over (a red blade vanishes on a red wall)
+      stain = Math.min(0.4, stain + stained);
       bladeMat.color.copy(steel).lerp(kit.blood, stain);
-      blurMat.color.setRGB(0.4, 0.45, 0.47).lerp(kit.blood, stain * 0.7);
+      blurMat.color.setRGB(0.4, 0.45, 0.47).lerp(kit.blood, stain * 0.6);
     },
     dispose() { bladeMat.dispose(); blurMat.dispose(); blurGeo.dispose(); },
   };
@@ -188,7 +274,7 @@ function buildSpikes(ctx, view, kit) {
   // base strip: striped rounded slab + dark edging
   const base = mesh(THREE, kit.track(scaleUV(rbox(THREE, len, 0.16, depth, 0.05, 2), len / 0.9, 1)), kit.stripes);
   base.position.y = 0.06;
-  group.add(base);
+  group.add(base, endCap(THREE, kit, len, 0.17, 0, 0.06, depth / 2 + 0.006));
   const E = builder(THREE, { colors: true });
   E.add(rbox(THREE, len + 0.12, 0.08, depth + 0.06, 0.03), { pos: [0, 0.01, 0], color: PAL.iron });
   E.add(rbox(THREE, len - 0.1, 0.05, depth - 0.18, 0.02), { pos: [0, 0.155, 0], color: PAL.gunmetal });
@@ -201,8 +287,15 @@ function buildSpikes(ctx, view, kit) {
   S.add(new THREE.CylinderGeometry(0.12, 0.13, 0.05, 6), { pos: [0, 0.02, 0] });
   const spikeGeo = kit.track(S.build());
   const count = nx * nz;
-  const cones = new THREE.InstancedMesh(spikeGeo, kit.blade, count);
+  const cones = new THREE.InstancedMesh(spikeGeo, kit.spikeSteel, count);
   cones.castShadow = true; cones.receiveShadow = true;
+  // identity: unlit yellow collars + dark ink hulls (share the cones' instance matrices)
+  const collarGeo = new THREE.CylinderGeometry(0.145, 0.15, 0.09, 8).translate(0, 0.035, 0);
+  const collars = new THREE.InstancedMesh(collarGeo, kit.markYellow, count);
+  collars.instanceMatrix = cones.instanceMatrix;
+  const hull = new THREE.InstancedMesh(spikeGeo, kit.inkHull, count);
+  hull.instanceMatrix = cones.instanceMatrix;
+  for (const m of [collars, hull]) { m.castShadow = false; m.receiveShadow = false; group.add(m); }
   const m4 = new THREE.Matrix4(); const q = new THREE.Quaternion(); const e = new THREE.Euler(); const v = new THREE.Vector3(); const s = new THREE.Vector3();
   const local = [];
   let i = 0;
@@ -270,7 +363,7 @@ function slotPlate(ctx, kit, view, halfLen, z0, z1) {
   st.add(scaleUV(new THREE.BoxGeometry(halfLen * 2 + 0.3, 0.08, 0.14), (halfLen * 2 + 0.3) / 0.8, 1), { pos: [0, 0.03, -depth / 2 - 0.08] });
   st.add(scaleUV(new THREE.BoxGeometry(halfLen * 2 + 0.3, 0.08, 0.14), (halfLen * 2 + 0.3) / 0.8, 1), { pos: [0, 0.03, depth / 2 + 0.08] });
   const stripes = mesh(THREE, kit.track(st.build()), kit.stripes);
-  g.add(plate, stripes);
+  g.add(plate, stripes, endCap(THREE, kit, halfLen * 2 + 0.3, 0.12, 0, 0.03, depth / 2 + 0.156));
   void view;
   return g;
 }
@@ -298,7 +391,7 @@ function buildSaw(ctx, view, kit) {
   const gang = sawGang(ctx, kit, R, view.z0, view.z1);
   const holder = new THREE.Group();
   holder.position.set(view.x, view.y, 0);
-  holder.add(gang.spin, gang.blur);
+  holder.add(gang.spin, gang.blur, gang.back);
   group.add(holder);
   return {
     group,
@@ -326,27 +419,29 @@ function buildRailSaw(ctx, view, kit) {
   rail.add(slotPlate(ctx, kit, view, half + chord + 0.1, view.z0, view.z1));
   // twin chrome rails + end stops
   const B = builder(THREE, { colors: true });
+  const BY = builder(THREE, { colors: true }); // self-lit hazard paint
   const depth = view.z1 - view.z0;
   for (const s of [-1, 1]) {
     B.add(rbox(THREE, (half + chord) * 2 + 0.6, 0.12, 0.12, 0.04), { pos: [0, 0.1, s * (depth / 2 + 0.28)], color: PAL.chrome });
-    for (const e of [-1, 1]) B.add(rbox(THREE, 0.3, 0.35, 0.3, 0.06), { pos: [e * (half + chord + 0.35), 0.17, s * (depth / 2 + 0.28)], color: PAL.hazard });
+    for (const e of [-1, 1]) BY.add(rbox(THREE, 0.3, 0.35, 0.3, 0.06), { pos: [e * (half + chord + 0.35), 0.17, s * (depth / 2 + 0.28)], color: PAL.hazard });
   }
-  rail.add(mesh(THREE, kit.track(B.build()), kit.M.paintedMetal));
+  rail.add(mesh(THREE, kit.track(B.build()), kit.M.paintedMetal), mesh(THREE, kit.track(BY.build()), kit.hazPaint));
   group.add(rail);
   // moving carriage: yellow trolleys on both rails + the blade gang
   const car = new THREE.Group();
   const C = builder(THREE, { colors: true });
+  const CY = builder(THREE, { colors: true });
   for (const s of [-1, 1]) {
-    C.add(rbox(THREE, 0.9, 0.3, 0.3, 0.08), { pos: [0, 0.2, s * (depth / 2 + 0.28)], color: PAL.hazard });
+    CY.add(rbox(THREE, 0.9, 0.3, 0.3, 0.08), { pos: [0, 0.2, s * (depth / 2 + 0.28)], color: PAL.hazard });
     C.add(rbox(THREE, 0.2, off + 0.1, 0.12, 0.04), { pos: [0, (off + 0.1) / 2 + 0.1, s * (depth / 2 + 0.2)], color: PAL.gunmetal });
   }
   const carMesh = mesh(THREE, kit.track(C.build()), kit.M.paintedMetal);
   const carFrame = new THREE.Group();
   carFrame.rotation.z = rail.rotation.z;
-  carFrame.add(carMesh);
+  carFrame.add(carMesh, mesh(THREE, kit.track(CY.build()), kit.hazPaint));
   car.add(carFrame);
   const gang = sawGang(ctx, kit, R, view.z0, view.z1);
-  car.add(gang.spin, gang.blur);
+  car.add(gang.spin, gang.blur, gang.back);
   group.add(car);
   void sgn;
   return {
@@ -380,8 +475,10 @@ function buildGrinder(ctx, view, kit) {
   const lip = 0.18;
   B.add(rbox(THREE, W + 0.62, 0.1, depth + 0.32, 0.04), { pos: [0, Hh + 0.0, 0], color: PAL.gunmetal });
   B.add(new THREE.BoxGeometry(rr * 4.2, 0.02, depth - 0.05), { pos: [0, Hh + 0.055, 0], color: 0x0d1011 });
-  B.add(rbox(THREE, lip, 0.14, depth + 0.32, 0.04), { pos: [-(rr * 2.1 + lip / 2), Hh + 0.04, 0], color: PAL.hazard });
-  B.add(rbox(THREE, lip, 0.14, depth + 0.32, 0.04), { pos: [rr * 2.1 + lip / 2, Hh + 0.04, 0], color: PAL.hazard });
+  const BY = builder(THREE, { colors: true }); // self-lit hazard paint: the jaw lips
+  BY.add(rbox(THREE, lip, 0.14, depth + 0.32, 0.04), { pos: [-(rr * 2.1 + lip / 2), Hh + 0.04, 0], color: PAL.hazard });
+  BY.add(rbox(THREE, lip, 0.14, depth + 0.32, 0.04), { pos: [rr * 2.1 + lip / 2, Hh + 0.04, 0], color: PAL.hazard });
+  group.add(mesh(THREE, kit.track(BY.build()), kit.hazPaint));
   // bolts
   for (const s of [-1, 1]) for (let k = 0; k < 5; k++) {
     B.add(new THREE.SphereGeometry(0.045, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [s * (W / 2 + 0.12), Hh + 0.05, -depth / 2 + (k + 0.5) * (depth / 5)], color: PAL.steel });
@@ -445,11 +542,15 @@ function buildCrusher(ctx, view, kit) {
   group.position.set(wx, wy, (z0 + z1) / 2);
   group.rotation.z = wallRot(view.n);
   // fixed frame around the plate opening (on the wall surface) + warning lamps + label
+  // striped (self-lit) mounting frame around the plate opening: the crusher's footprint reads even
+  // with the plate retracted flush against a painted wall
+  const FS = builder(THREE);
+  FS.add(scaleUV(rbox(THREE, W + 0.5, 0.12, 0.26, 0.04), (W + 0.5) / 0.7, 1), { pos: [0, 0.06, -depth / 2 - 0.16] });
+  FS.add(scaleUV(rbox(THREE, W + 0.5, 0.12, 0.26, 0.04), (W + 0.5) / 0.7, 1), { pos: [0, 0.06, depth / 2 + 0.16] });
+  FS.add(scaleUV(rbox(THREE, 0.26, 0.12, depth + 0.58, 0.04), 1, (depth + 0.58) / 0.7), { pos: [-W / 2 - 0.16, 0.06, 0] });
+  FS.add(scaleUV(rbox(THREE, 0.26, 0.12, depth + 0.58, 0.04), 1, (depth + 0.58) / 0.7), { pos: [W / 2 + 0.16, 0.06, 0] });
+  group.add(mesh(THREE, kit.track(FS.build()), kit.stripes));
   const F = builder(THREE, { colors: true });
-  F.add(rbox(THREE, W + 0.5, 0.1, 0.22, 0.04), { pos: [0, 0.05, -depth / 2 - 0.14], color: PAL.gunmetal });
-  F.add(rbox(THREE, W + 0.5, 0.1, 0.22, 0.04), { pos: [0, 0.05, depth / 2 + 0.14], color: PAL.gunmetal });
-  F.add(rbox(THREE, 0.22, 0.1, depth + 0.5, 0.04), { pos: [-W / 2 - 0.14, 0.05, 0], color: PAL.gunmetal });
-  F.add(rbox(THREE, 0.22, 0.1, depth + 0.5, 0.04), { pos: [W / 2 + 0.14, 0.05, 0], color: PAL.gunmetal });
   for (const s of [-1, 1]) F.add(rbox(THREE, 0.36, 0.16, 0.36, 0.06), { pos: [s * (W / 2 + 0.14), 0.1, depth / 2 + 0.14], color: PAL.iron });
   group.add(mesh(THREE, kit.track(F.build()), kit.M.paintedMetal));
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: PAL.amber, emissiveIntensity: 0, roughness: 0.25 });
@@ -471,7 +572,7 @@ function buildCrusher(ctx, view, kit) {
   for (let k = 0; k < 6; k++) for (const s of [-1, 1]) {
     PB.add(new THREE.SphereGeometry(0.05, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [-W / 2 + 0.2 + k * ((W - 0.4) / 5), -P * 0.125, s * (depth / 2)], rot: [s * Math.PI / 2, 0, 0], color: PAL.steelDark });
   }
-  plate.add(mesh(THREE, kit.track(PB.build()), kit.M.paintedMetal));
+  plate.add(mesh(THREE, kit.track(PB.build()), kit.hazPaint), endCap(THREE, kit, W, P * 0.75, 0, -P * 0.125, depth / 2 + 0.006));
   const face = mesh(THREE, kit.track(scaleUV(rbox(THREE, W + 0.02, P * 0.3, depth + 0.02, 0.05), W / 0.8, depth / 0.8)), kit.stripes);
   face.position.y = P * 0.35;
   plate.add(face);

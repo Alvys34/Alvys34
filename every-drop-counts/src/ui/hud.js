@@ -54,6 +54,10 @@ export function createHud({ root, bus, getSettings, onInsets = null }) {
         <div class="gauge-track"><div class="gauge-fill"></div><div class="gauge-low"></div></div>
       </div>
       <div class="gauge-next"></div>
+      <div class="demand" hidden>
+        <div class="demand-row"><span class="demand-l">${HUD.demand}</span><b class="demand-tier num"></b><span class="demand-rate num"></span></div>
+        <div class="demand-bar"><i></i></div>
+      </div>
     </section>
     <div class="feed"></div>
     <section class="plate clock-plate">
@@ -92,6 +96,7 @@ export function createHud({ root, bus, getSettings, onInsets = null }) {
   const litersN = q('.liters-n'); const litersBox = q('.liters');
   const marks = q('.gauge-marks'); const fill = q('.gauge-fill'); const lowMark = q('.gauge-low'); const nextLine = q('.gauge-next');
   const feed = q('.feed');
+  const demand = q('.demand'); const demandTier = q('.demand-tier'); const demandRate = q('.demand-rate'); const demandBar = q('.demand-bar > i');
   const clockPlate = q('.clock-plate'); const shiftName = q('.shift-name'); const clock = q('.clock');
   const donorsN = q('.donors-n'); const intakeMeta = q('.intake-meta'); const intakeT = q('.intake-t'); const clockExtra = q('.clock-extra');
   const inspMeta = q('.insp-meta'); const inspText = q('.insp-t');
@@ -116,30 +121,83 @@ export function createHud({ root, bus, getSettings, onInsets = null }) {
   let lastClockSec = -1;
   let fillLevel = 0;
   let overtimeStart = 25;
+  // demand tiers (Overtime): fallback tracking when the sim gives a tier but no progress
+  let tierSeen = -1; let tierStartRate = 0; let tierSpan = 1;
 
   function reset(lv, m) {
     level = lv; mode = m || 'shift';
     shownLiters = 0; lastLiters = 0; starsLit = 0; quotaKey = '';
     paTimer = 0; pa.hidden = true; incomingT = 0; comboT = 0; combo.hidden = true; comboShownMult = 0;
     lastClockSec = -1; fillLevel = 0;
+    tierSeen = -1; tierStartRate = 0; tierSpan = 1;
     feed.textContent = '';
     for (const k of Object.keys(cache)) delete cache[k];
     el.dataset.mode = mode;
     el.classList.remove('urgent');
     clockPlate.classList.remove('urgent', 'warn');
+    tankPlate.classList.remove('low');
+    // first frame shows the level's own numbers (not "0:00 · 0 left") until the first snapshot lands
+    const waves = (lv && Array.isArray(lv.waves)) ? lv.waves : [];
+    const donorsTotal = waves.reduce((a, w) => a + (Number(w.count) || 0), 0);
+    donorsN.textContent = String(donorsTotal);
+    intakeMeta.hidden = true;
+    litersN.innerHTML = odometer(0);
+    fill.style.width = '0%';
     if (mode === 'overtime') {
       tankLabel.textContent = HUD.tank;
       shiftName.textContent = HUD.overtime;
       overtimeStart = (lv && lv.overtime && lv.overtime.startVolume) || 25;
       marks.textContent = '';
+      clock.textContent = fmtUp(0);
+      litersN.innerHTML = odometer(overtimeStart);
+      nextLine.textContent = '';
+      demand.hidden = false;
+      renderDemand(0, 0, 0);
     } else {
       tankLabel.textContent = HUD.liters;
       shiftName.textContent = lv ? `Shift ${lv.number} · ${lv.name}` : '';
+      clock.textContent = fmtTime(lv && Number.isFinite(lv.duration) ? lv.duration : 0);
+      demand.hidden = true;
+      if (lv && Array.isArray(lv.quota)) {
+        quotaKey = lv.quota.join(',');
+        buildMarks(lv.quota);
+        marks.querySelectorAll('.mark').forEach((mk, i) => mk.classList.toggle('next', i === 0));
+        nextLine.textContent = HUD.nextDrop(Math.max(0.1, lv.quota[0]).toFixed(1));
+      }
     }
+    clockExtra.textContent = '';
     tankSub.textContent = '';
     lowMark.hidden = mode !== 'overtime';
     setPrompt(null);
     setRestart(0);
+  }
+
+  /** Overtime demand: tier number, drain rate, bar = progress to the next tier. */
+  function renderDemand(tier, rate, prog) {
+    const idle = !(rate > 0);
+    cls('demand', demand, 'idle', idle);
+    set('dtier', demandTier, idle ? '' : HUD.demandTier(tier));
+    set('drate', demandRate, idle ? HUD.pumpIdle : HUD.demandRate(rate.toFixed(2)));
+    set('dbar', demandBar.style, `scaleX(${idle ? 0 : Math.max(0, Math.min(1, prog)).toFixed(3)})`, 'transform');
+  }
+  function demandFrom(s, live) {
+    const ot = s.overtime || {};
+    const pick = (...v) => { for (const x of v) if (typeof x === 'number' && Number.isFinite(x)) return x; return null; };
+    const rate = Math.max(0, pick(ot.demandRate, s.demandRate, ot.drainRate, s.drainRate, live && live.mode ? live.mode.drainRate : null) ?? 0);
+    let tier = pick(ot.demandTier, s.demandTier);
+    let prog = pick(ot.demandProgress, ot.demandTierProgress, s.demandProgress);
+    if (tier == null) {
+      // no tier from the sim yet: one tier per 1 L/s of drain (≈ one per minute at the default ramp)
+      tier = rate > 0 ? Math.floor(rate) + 1 : 0;
+      if (prog == null) prog = rate % 1;
+    } else if (prog == null) {
+      if (tier !== tierSeen) {
+        if (tierSeen >= 0 && tier > tierSeen && rate > tierStartRate) tierSpan = Math.max(0.05, (rate - tierStartRate) / (tier - tierSeen));
+        tierSeen = tier; tierStartRate = rate;
+      }
+      prog = (rate - tierStartRate) / tierSpan;
+    }
+    return { tier: Math.round(tier), rate, prog };
   }
 
   function buildMarks(quota) {
@@ -246,8 +304,11 @@ export function createHud({ root, bus, getSettings, onInsets = null }) {
       set('low', lowMark.style, `${(lowAt / Math.max(1, cap)) * 100}%`, 'left');
       const low = vol < lowAt && s.clock && s.clock.t > 3;
       cls('tank', tankPlate, 'low', low);
-      const drain = ot.drainRate ?? (live && live.mode ? live.mode.drainRate || 0 : 0);
-      set('next', nextLine, drain > 0 ? `${low ? `${HUD.dryWarning} · ` : ''}${HUD.demand} −${drain.toFixed(2)} L/s` : HUD.pumpIdle, 'textContent');
+      const dm = demandFrom(s, live);
+      if (cache.tierN !== undefined && dm.tier > cache.tierN && !reduce) bump(demand, 'pop');
+      cache.tierN = dm.tier;
+      renderDemand(dm.tier, dm.rate, dm.prog);
+      set('next', nextLine, low ? HUD.dryWarning : '', 'textContent');
       set('extra', clockExtra, `${HUD.delivered} ${s.liters.toFixed(1)} L`);
     } else {
       const L = s.liters || 0;

@@ -30,9 +30,11 @@ import { ATTRACT_LEVEL, createAttract } from './attract.js';
 import { refreshGlyphs } from './glyphs.js';
 import { icon } from './icons.js';
 import { esc } from './dom.js';
-import { BRIEFINGS, SHIFT_NAMES_FALLBACK, TOTAL_SHIFTS, PROMPTS, RESULTS, RECORDS, MENU } from './copy.js';
+import { BRIEFINGS, NOVELTY, SHIFT_NAMES_FALLBACK, TOTAL_SHIFTS, PROMPTS, RESULTS, RECORDS, MENU, HUD as HUD_COPY, SAVE_NOTES } from './copy.js';
+import { levelNovelties } from './briefing.js';
 
 const RESULTS_DELAY = 1.8; // s after shift:end before the report (let the last splashes land)
+const TEACH_DONE = 3;      // a verb's prompt never shows again after this many successful uses (save.teach)
 
 export function createUI({ root, bus, simBus, sim, view, loop, input, audio, canvas, params, debug = false }) {
   const wrap = document.createElement('div');
@@ -91,7 +93,15 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     openShifts() { screens.shifts.refresh(); nav.push(screens.shifts); },
     openOvertime() { if (app.overtimeUnlocked()) prepare('overtime'); },
     openRecords() { screens.records.refresh(); nav.push(screens.records); },
-    openSettings() { screens.settings.refresh(); nav.push(screens.settings); },
+    openSettings() {
+      screens.settings.refresh(); nav.push(screens.settings);
+      // F11 / Alt+Enter on desktop change the window without the menu: show the real state
+      systems.isFullscreen().then((on) => {
+        if (typeof on !== 'boolean' || getSave().settings.fullscreen === on) return;
+        updateSave((x) => { x.settings.fullscreen = on; });
+        if (nav.top === screens.settings) screens.settings.refreshRow('fullscreen');
+      }).catch(() => {});
+    },
     openCredits() { screens.credits.refresh(); nav.push(screens.credits); },
     async quitGame() {
       if (!app.isDesktop) return;
@@ -186,6 +196,8 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       name: overtime ? MENU.overtime : level.name,
       text: b.text,
       icon: b.icon,
+      lesson: typeof level.lesson === 'string' ? level.lesson : '',
+      news: overtime ? [] : levelNovelties(level, listLevels().map((l) => { try { return getLevel(l.id); } catch { return l; } })).map((k) => ({ key: k, ...NOVELTY[k] })),
       quota: overtime ? null : level.quota,
       duration: level.duration,
       best: overtime ? null : (getSave().best[level.id] && getSave().best[level.id].stars > 0 ? getSave().best[level.id] : null),
@@ -202,7 +214,10 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       ref: overtime ? 'overtime' : level.number, overtime, level,
       extras: { severs: 0, combos: 0, explosions: 0, inspectorFines: 0, inspectorBonus: 0, slams: 0 },
       ended: false, result: null, resultsTimer: 0, committed: false,
-      teach: { t: 0, rotHeld: 0, idle: 0, nudge: false, brakeUsed: false, fast: 0 },
+      teach: {
+        t: 0, rotHeld: 0, idle: 0, nudge: false, prevRot: 0, prevBrake: false, slamCount: 0, rotCounted: false,
+        brakeCue: 0, brakeCues: 0, slamCue: false, underT: 0, heads: new Map(),
+      },
     };
   }
 
@@ -306,6 +321,25 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     if (mode === 'playing' || mode === 'menu' || mode === 'boot') bubbles.say(p.id, p.text);
   }));
   offs.push(systems.onAchievement((def) => toast({ title: RECORDS.toast, name: def.name, kind: 'ach' })));
+  // drowning: "−X L wasted" at the donor (pale: lost product, not a blood value). The sim may send
+  // donor:drowning { id, x, y, z | pos, wasted } and/or donor:death { cause: 'drown', wasted }: one popup per donor.
+  const drowned = new Map();
+  const onDrown = (p) => {
+    if (!p || mode !== 'playing') return;
+    const key = p.id ?? `${p.x},${p.y}`;
+    const now = performance.now();
+    const last = drowned.get(key);
+    if (last && now - last.t < 4000 && (last.hadNum || !Number.isFinite(p.wasted))) return;
+    const pos = Array.isArray(p.pos) ? p.pos : [p.x, p.y, p.z];
+    if (!pos.every((v) => Number.isFinite(v))) return;
+    const hasNum = Number.isFinite(p.wasted) && p.wasted > 0;
+    if (last && now - last.t < 4000 && hasNum) bubbles.dropPopup(key);
+    drowned.set(key, { t: now, hadNum: hasNum });
+    if (drowned.size > 64) drowned.clear();
+    bubbles.popup(key, pos, hasNum ? HUD_COPY.wasted(p.wasted < 10 ? p.wasted.toFixed(1) : Math.round(p.wasted)) : HUD_COPY.wastedPlain, 'wasted');
+  };
+  offs.push(bus.on('donor:drowning', onDrown));
+  offs.push(bus.on('donor:death', (p) => { if (p && p.cause === 'drown') onDrown(p); }));
 
   function showResults() {
     const r = run.result;
@@ -435,24 +469,90 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     }
   }
 
+  // ------------------------------------------------------------------ teaching prompts
+  const teachUses = (verb) => { const t = getSave().teach; return (t && t[verb]) || 0; };
+  /** A successful use of a verb: counted in the save until TEACH_DONE (then the prompt is retired). */
+  function teachUsed(verb) {
+    if (teachUses(verb) >= TEACH_DONE) return;
+    updateSave((x) => { x.teach = x.teach || {}; x.teach[verb] = Math.min(99, (x.teach[verb] || 0) + 1); });
+  }
+  /**
+   * Shift 2 SLAM cue: a donor is impaled, or a few donors rest (drum-local speed < 1.2 m/s) under a
+   * hazard that is currently overhead. Returns null when the live sim state is not readable.
+   */
+  function crowdUnderHazard(T, dt) {
+    const st = sim.state;
+    if (!st || !st.donors || !st.drum || !st.level) return null;
+    const th = st.drum.theta || 0; const c = Math.cos(th); const sn = Math.sin(th);
+    const W = 8; const H = 5;
+    const over = [];
+    for (const hz of st.level.hazards || []) {
+      const mid = hz.at ?? (Number.isFinite(hz.from) && Number.isFinite(hz.to) ? (hz.from + hz.to) / 2 : 0);
+      const half = Number.isFinite(hz.from) && Number.isFinite(hz.to) ? Math.abs(hz.to - hz.from) / 2 : (hz.width || (hz.radius || 1) * 2) / 2;
+      const [lx, ly] = hz.wall === 'ceiling' ? [mid, H] : hz.wall === 'left' ? [-W, mid] : hz.wall === 'right' ? [W, mid] : [mid, -H];
+      const wy = sn * lx + c * ly;
+      if (wy > 1.5) over.push({ wx: c * lx - sn * ly, wy, half: half + 0.6 });
+    }
+    let impaled = false; let under = 0;
+    const seen = new Set();
+    for (const d of st.donors) {
+      if (!d.alive) continue;
+      if (d.impaled > 0) impaled = true;
+      const h = d.parts && d.parts.head;
+      if (!h || h.removed) continue;
+      seen.add(d.id);
+      const prev = T.heads.get(d.id);
+      T.heads.set(d.id, [h.x, h.y]);
+      if (!prev || !(dt > 0) || !over.length) continue;
+      const v = Math.hypot(h.x - prev[0], h.y - prev[1]) / dt;
+      if (v > 1.2) continue;
+      const wx = c * h.x - sn * h.y; const wy = sn * h.x + c * h.y;
+      if (over.some((o) => Math.abs(wx - o.wx) < o.half && wy < o.wy - 2.5)) under++;
+    }
+    for (const id of T.heads.keys()) if (!seen.has(id)) T.heads.delete(id);
+    return impaled || under >= 2;
+  }
+
   function teach(s, dt) {
     if (!run || run.overtime || run.ended) { hud.setPrompt(null); return; }
     const T = run.teach;
     const snap = sim.snapshot();
     if (!snap) return;
     T.t += dt;
-    if (Math.abs(s.rotate) > 0.3) { T.rotHeld += dt; T.idle = 0; if (T.rotHeld > 0.35) T.nudge = false; } else T.idle += dt;
-    if (s.brake) T.brakeUsed = true;
-    T.fast = Math.abs(snap.drum.omega) > 1.9 ? T.fast + dt : 0;
-    if (T.idle > 12 && snap.alive > 0) T.nudge = true;
     const n = run.level.number;
-    const lessons = Array.isArray(run.level.teach) ? run.level.teach : n === 1 ? ['rotate', 'brake'] : n === 2 ? ['slam'] : [];
-    const slamUsed = snap.slam && snap.slam.count > 0;
+    const lessons = Array.isArray(run.level.teach) ? run.level.teach : n === 1 ? ['rotate', 'brake'] : n === 2 ? ['slam', 'brake'] : n === 3 ? ['brake'] : [];
+    const omega = Math.abs((snap.drum && snap.drum.omega) || 0);
+    const rotating = Math.abs(s.rotate) > 0.3;
+    // ---- usage (dismisses the prompt now, retires it after TEACH_DONE uses across runs)
+    if (rotating) { T.rotHeld += dt; T.idle = 0; if (T.rotHeld > 0.35) T.nudge = false; } else T.idle += dt;
+    if (!T.rotCounted && T.rotHeld > 0.6) { T.rotCounted = true; teachUsed('rotate'); }
+    if (s.brake && !T.prevBrake && omega > 0.8) { T.brakeCue = 0; teachUsed('brake'); }
+    const slams = (snap.slam && snap.slam.count) || 0;
+    if (slams > T.slamCount) { T.slamCount = slams; T.slamCue = false; teachUsed('slam'); }
+    // ---- cues
+    if (T.idle > 12 && snap.alive > 0) T.nudge = true;
+    // BRAKE: the first couple of times the drum is let go at speed (shifts 1-3)
+    if (lessons.includes('brake') && !rotating && Math.abs(T.prevRot) > 0.3 && omega > 1.5 && T.brakeCues < 2 && teachUses('brake') < TEACH_DONE) {
+      T.brakeCue = 2.6; T.brakeCues++;
+    }
+    if (T.brakeCue > 0) { T.brakeCue -= dt; if (rotating || omega < 0.4) T.brakeCue = 0; }
+    // SLAM (shift 2): first time donors are impaled / resting under overhead machinery
+    if (lessons.includes('slam') && !T.slamCue && T.slamCount === 0 && teachUses('slam') < TEACH_DONE) {
+      const under = crowdUnderHazard(T, dt);
+      if (under == null) {
+        const w0 = run.level.waves && run.level.waves[0];
+        if (T.t > (w0 ? w0.at : 1.5) + 6 && snap.alive > 0) T.slamCue = true; // fallback: after the first wave lands
+      } else {
+        T.underT = under ? T.underT + dt : 0;
+        if (T.underT > 0.6) T.slamCue = true;
+      }
+    }
+    T.prevRot = s.rotate; T.prevBrake = !!s.brake;
     let p = null;
     if (s.restartProgress > 0.02) p = null;
-    else if (lessons.includes('slam') && !slamUsed && T.t > 3 && snap.slam.ready && snap.alive > 0) p = { glyph: 'slam', text: PROMPTS.slam };
-    else if ((lessons.includes('rotate') && T.rotHeld < 0.6 && T.t > 1.2) || T.nudge) p = { glyph: 'rotate', text: PROMPTS.rotate };
-    else if (lessons.includes('brake') && !T.brakeUsed && T.fast > 2.5) p = { glyph: 'brake', text: PROMPTS.brake };
+    else if (T.slamCue && snap.slam && snap.slam.ready && snap.alive > 0) p = { glyph: 'slam', text: PROMPTS.slam };
+    else if (T.brakeCue > 0) p = { glyph: 'brake', text: PROMPTS.brake };
+    else if (((lessons.includes('rotate') && T.rotHeld < 0.6 && T.t > 1.2) || T.nudge) && teachUses('rotate') < TEACH_DONE) p = { glyph: 'rotate', text: PROMPTS.rotate };
     hud.setPrompt(p, input.lastDevice);
     if (p) refreshGlyphs(hud.el.querySelector('.prompt'), input.lastDevice);
   }
@@ -471,7 +571,14 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     systems.syncSteam();
     bubbles.setVisible(getSave().settings.speechBubbles);
     refreshGlyphs(wrap, input.lastDevice);
-    if (saveInfo.status === 'corrupt') setTimeout(() => toast({ title: 'Save file unreadable', name: 'A fresh record was started.', kind: 'info' }), 600);
+    const note = SAVE_NOTES[saveInfo.status];
+    if (note) setTimeout(() => toast({ title: note.title, name: note.name, kind: 'info', ms: 6000 }), 600);
+    // desktop starts fullscreen on its own: make the saved setting match the window
+    if (d && typeof d.isFullscreen === 'function') {
+      systems.isFullscreen().then((on) => {
+        if (typeof on === 'boolean' && getSave().settings.fullscreen !== on) updateSave((x) => { x.settings.fullscreen = on; });
+      }).catch(() => {});
+    }
     if (autostart != null) { startRun(autostart); return; }
     mode = 'boot';
     enterAttract();
@@ -492,7 +599,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     /** debug helpers for tools/ui-shots.mjs */
     debug: {
       toTitle, toShiftSelect, playEnding, toast,
-      showResults(r, extras = {}) { run = run || newRun(r.levelNumber || 1); run.result = r; run.ended = true; run.record = { prev: null, isBest: true, notes: [] }; Object.assign(run.extras, extras); showResults(); },
+      showResults(r, extras = {}) { const n = r.levelNumber || 1; if (!run || run.overtime || run.level.number !== n) run = newRun(n); run.result = r; run.ended = true; run.record = { prev: null, isBest: true, notes: [] }; Object.assign(run.extras, extras); showResults(); },
       showOvertime(r, rec) { run = newRun('overtime'); run.result = r; run.ended = true; run.record = rec; showResults(); },
       brief: (n) => prepare(n),
       open(name) { const m = { settings: app.openSettings, records: app.openRecords, credits: app.openCredits, shifts: app.openShifts }; if (m[name]) m[name](); },

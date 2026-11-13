@@ -77,16 +77,20 @@ const USER_DATA = app.getPath('userData');
 try { fs.mkdirSync(USER_DATA, { recursive: true }); } catch { /* reported by log() fallback */ }
 
 // ------------------------------------------------------------------------------------------------
-// Logging: userData/logs/main.log (previous run kept as main.old.log)
+// Logging: userData/logs/main.log (previous run kept as main.old.log). The log is opened after the
+// single-instance check: only the instance that keeps running rotates it; a second launch just
+// appends its one "another instance" line, so the running game's log survives.
 // ------------------------------------------------------------------------------------------------
 const LOG_DIR = path.join(USER_DATA, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'main.log');
 let logFd = null;
-try {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-  if (fs.existsSync(LOG_FILE)) fs.renameSync(LOG_FILE, path.join(LOG_DIR, 'main.old.log'));
-  logFd = fs.openSync(LOG_FILE, 'a');
-} catch { logFd = null; }
+function openLog(rotate) {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    if (rotate && fs.existsSync(LOG_FILE)) fs.renameSync(LOG_FILE, path.join(LOG_DIR, 'main.old.log'));
+    logFd = fs.openSync(LOG_FILE, 'a');
+  } catch { logFd = null; }
+}
 let logBytes = 0;
 function log(...parts) {
   const line = `[${new Date().toISOString()}] ${parts.map((p) => (typeof p === 'string' ? p : safeJson(p))).join(' ')}`;
@@ -128,7 +132,9 @@ const GAME_ROOT = resolveGameRoot();
 // ------------------------------------------------------------------------------------------------
 // Single instance
 // ------------------------------------------------------------------------------------------------
-if (!app.requestSingleInstanceLock()) {
+const gotInstanceLock = app.requestSingleInstanceLock();
+openLog(gotInstanceLock);
+if (!gotInstanceLock) {
   log('[main] another instance is running; exiting');
   app.exit(0);
   return; // eslint-disable-line no-useless-return -- CommonJS top-level return is valid in Electron main

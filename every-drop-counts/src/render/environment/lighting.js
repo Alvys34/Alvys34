@@ -73,12 +73,14 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
 
   // ---------------- escalation ----------------
   const C = {
-    keyCalm: new THREE.Color(0xfff4e6), keyRed: new THREE.Color(0xff5a46),
-    skyCalm: new THREE.Color(0xfff8ec), skyRed: new THREE.Color(0xc2423a),
-    gndCalm: new THREE.Color(0x9fc7b8), gndRed: new THREE.Color(0x4a2422),
-    fillCalm: new THREE.Color(0xdff3ff), fillRed: new THREE.Color(0xff5a48),
-    bgCalm: new THREE.Color(0xcfe6dc), bgRed: new THREE.Color(0x5a3633),
-    tubeCalm: new THREE.Color(0xf4fffb), tubeRed: new THREE.Color(0xff6a5a),
+    // emergency = a saturated red KEY with dark, cool shadows and a cool teal counter-fill (so the
+    // donors keep their shape and colour), not a warm brown wash over everything (that read sepia)
+    keyCalm: new THREE.Color(0xfff4e6), keyRed: new THREE.Color(PAL.emergency),
+    skyCalm: new THREE.Color(0xfff8ec), skyRed: new THREE.Color(0xa8302a),
+    gndCalm: new THREE.Color(0x9fc7b8), gndRed: new THREE.Color(0x1e2a2e),
+    fillCalm: new THREE.Color(0xdff3ff), fillRed: new THREE.Color(0x7fd8ee),
+    bgCalm: new THREE.Color(0xcfe6dc), bgRed: new THREE.Color(0x4a1512),
+    tubeCalm: new THREE.Color(0xf4fffb), tubeRed: new THREE.Color(0xff4a3a),
   };
   let t = 0;
   let flick = 0; let flickTimer = 1.5; let fillShown = 0;
@@ -93,10 +95,12 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
       const fillNow = state && state.pool ? state.pool.fill || 0 : 0;
       fillShown += (fillNow - fillShown) * Math.min(1, dt * 1.5);
       const f = fillShown;
-      const e = smooth(0.18, 0.95, f);
+      // clean mint below ~30 % fill, starts at ~35 %, clearly red by 45 % (shift 8's ceiling), full
+      // by ~52 % (same curve as post.js EMERG_FROM / EMERG_TO)
+      const e = smooth(0.28, 0.52, f);
       api.emergency = e;
       // slow pulse + failing flicker once things get bad
-      const pulse = e > 0.4 ? 0.5 + 0.5 * Math.sin(t * 2.2) : 0;
+      const pulse = e > 0.25 ? 0.5 + 0.5 * Math.sin(t * 2.2) : 0;
       flickTimer -= dt;
       if (flickTimer <= 0) {
         flickTimer = 0.4 + hash(t) * (3.5 - 2.5 * e);
@@ -108,20 +112,22 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
       if (calm) flick = 0;
       const dip = flick > 0 && hash(Math.floor(t * 24)) < 0.6 ? 0.55 : 1;
 
-      key.color.copy(C.keyCalm).lerp(C.keyRed, e * 0.85);
-      key.intensity = (1.85 - 0.6 * e) * (e > 0.25 ? 0.85 + 0.15 * dip : 1);
-      hemi.color.copy(C.skyCalm).lerp(C.skyRed, e * 0.95);
+      const ek = Math.min(1, e * 1.15);
+      key.color.copy(C.keyCalm).lerp(C.keyRed, ek);
+      key.intensity = (1.85 + 0.1 * e) * (0.88 + 0.12 * (calm ? 0.5 : pulse) * e) * (e > 0.2 ? 0.85 + 0.15 * dip : 1);
+      hemi.color.copy(C.skyCalm).lerp(C.skyRed, ek);
       hemi.groundColor.copy(C.gndCalm).lerp(C.gndRed, e);
-      hemi.intensity = (0.62 - 0.17 * e) * (0.9 + 0.1 * dip) + pulse * 0.25 * e;
-      fill.color.copy(C.fillCalm).lerp(C.fillRed, e * 0.8);
-      fill.intensity = 0.5 + 0.5 * e * pulse;
-      rim.intensity = 0.55 * (1 - 0.5 * e);
-      scene.environmentIntensity = 0.42 - 0.18 * e;
+      hemi.intensity = (0.62 - 0.38 * e) * (0.9 + 0.1 * dip);
+      fill.color.copy(C.fillCalm).lerp(C.fillRed, e);
+      fill.intensity = 0.5 + 0.12 * e;
+      rim.intensity = 0.55 * (1 - 0.4 * e);
+      // the IBL is a calm MINT room: it must fade out, or it keeps every surface beige ("sepia")
+      scene.environmentIntensity = 0.42 * (1 - 0.88 * e);
       scene.background.copy(C.bgCalm).lerp(C.bgRed, e * 0.85);
       scene.fog.color.copy(scene.background);
 
-      // beacon: on above ~45 % fill, sweeping
-      const b = smooth(0.4, 0.6, f);
+      // beacon: fades in from ~32 %, fully on by 46 % fill (shift 8 reaches it), sweeping
+      const b = smooth(0.32, 0.46, f);
       spot.intensity = b * 520;
       const a = t * 3.4;
       spot.target.position.set(Math.cos(a) * 11, -2 + Math.sin(a * 0.6) * 4, -3 + Math.sin(a) * 2);

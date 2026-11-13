@@ -1,6 +1,6 @@
 # EVERY DROP COUNTS — Game Design Document
 
-> Working title. A DRAINWELL™ Community Donation Center experience.
+> Working title. A SUNNYVEIN Community Donation Center experience (provisional brand name, set in `src/core/brand.js`).
 > All numbers in this document are **placeholders** to be tuned in play/sim, unless marked LOCKED.
 
 ## 1. One sentence

@@ -121,6 +121,51 @@ export const POLICIES = {
   smart: smartPolicy,
 };
 
+// ------------------------------------------------------------------------------- personas --
+// The PLAYTEST-1 scripted humans (tools/qa/personas.js, tools/qa/humanmatrix.mjs), folded in so the
+// bot matrix covers them: they only use the verbs, with human timing.
+//   cautious  reads the PA for 6 s, then 0.25 s taps with 2 s pauses (3 per direction), tries
+//             SLAM once every ~15 s after 20 s
+//   holder    holds one direction forever (same input as `spin`)
+//   masher    holds a direction 3 s, flips, ... and hammers SLAM whenever it is ready
+//   thinker   the smart bot with human latency: reads the room 3 s, then decides every 0.3 s and
+//             holds the decision (one SLAM press per decision)
+const slamReady = (s) => s.drum.slamCooldown <= 0;
+/** wrap a policy with decision latency (s) and an optional wrong-direction error rate */
+export function lagged(inner, latency, noise = 0) {
+  return (s, t, m) => {
+    if (t < 3) return { rotate: 0 };
+    if (m.next == null || t >= m.next) {
+      m.next = t + latency;
+      m.mi = m.mi || {};
+      m.cur = inner(s, t, m.mi) || { rotate: 0 };
+      if (noise) {
+        m.rng = ((m.rng || 12345) * 16807) % 2147483647;
+        if (m.rng / 2147483647 < noise) m.cur = { rotate: m.cur.rotate ? -m.cur.rotate : 1, slam: false };
+      }
+    }
+    const o = { ...m.cur };
+    if (o.slam) m.cur = { ...m.cur, slam: false };
+    return o;
+  };
+}
+Object.assign(POLICIES, {
+  cautious: (s, t, m) => {
+    if (t < 6) return { rotate: 0 };
+    const k = Math.floor((t - 6) / 2.25);
+    const inTap = (t - 6) % 2.25 < 0.25;
+    const dir = Math.floor(k / 3) % 2 ? -1 : 1;
+    const slam = t > 20 && Math.floor(t / 15) !== m.lb && slamReady(s);
+    if (slam) m.lb = Math.floor(t / 15);
+    return { rotate: inTap ? dir : 0, slam };
+  },
+  holder: () => ({ rotate: 1 }),
+  masher: (s, t) => ({ rotate: Math.floor(t / 3) % 2 ? -1 : 1, slam: slamReady(s) }),
+  thinker: lagged(smartPolicy, 0.3),
+});
+/** the careless group (PLAYTEST-1 personas + mindless bots) used for the drowning / Overtime targets */
+export const CARELESS = ['spin', 'rock', 'masher', 'cautious', 'holder'];
+
 // ------------------------------------------------------------------------------------ smart --
 function smartPolicy(s, t, mem) {
   const d = s.drum;
@@ -140,13 +185,16 @@ function smartPolicy(s, t, mem) {
     const incoming = (s.level.waves || []).some((w) => w.types && !Array.isArray(w.types) && w.types.inspector && w.at - tc < 4 && w.at - tc > -3);
     if (visiting || incoming) {
       const r = steer(s, s.level.startAngle || 0, { maxW: 1.6 });
-      return { rotate: r.rotate, brake: r.brake, slam: false };
+      // a slam barely lifts his heavy ball: still slam drowning donors out of the pool
+      const drowning = s.donors.some((dn) => dn.alive && !dn.mustSurvive && (dn.drown01 ?? 0) > 0.15);
+      return { rotate: r.rotate, brake: r.brake, slam: drowning && d.slamCooldown <= 0 };
     }
   }
 
   // --- emergencies first
   if (d.slamCooldown <= 0) {
-    if (s.donors.some((dn) => dn.alive && !dn.mustSurvive && dn.drownTimer > 2.5)) slam = true; // anti-drown
+    // anti-drown: a player sees the bubble meter over a submerged head and slams them out
+    if (s.donors.some((dn) => dn.alive && !dn.mustSurvive && (dn.drown01 ?? 0) > 0.15)) slam = true;
     if (s.hazards.some((h) => h.view.kind === 'grinder' && h.view.clogged)) slam = true; // clear the jam
   }
 

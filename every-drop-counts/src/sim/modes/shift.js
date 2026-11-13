@@ -12,16 +12,32 @@ import { createSpawner } from '../spawner.js';
 import { starsFor } from '../scoring.js';
 import { createPaScript } from './pa.js';
 import { shiftReport } from './report.js';
+import { makeFillCurve } from '../pool.js';
 
 export default {
   id: 'shift',
   create(ctx, level) {
     const T = ctx.T;
     const spawner = createSpawner(ctx, level.hatch);
+    // the tide follows the litres collected along a concave curve tied to the quotas (pool.js)
+    ctx.pool.curve = makeFillCurve(level, T);
+    // WAVES (fix round 2, PLAYTEST-1 M6). Regular waves open in order: the first at its `at`; each
+    // later one when its TIMER expires — its `at` (legacy) or, when the level sets `waveGap` (or the
+    // wave its own `gap`), that many seconds after the previous regular wave opened — OR as soon as
+    // the drum is clear (advanceWhenClear, default true: nothing alive to process, hatch empty, for
+    // T.levels.clearDelay s), whichever comes first. Waves flagged `fixed: true` (Inspector visits)
+    // keep their own `at` schedule; only once every regular wave is out do they also advance on clear
+    // (so a fast operator never waits in an empty drum for the next visit).
     const waves = level.waves.map((w, i) => ({ ...w, index: i, due: w.at, warned: false, opened: false }));
+    const regular = waves.filter((w) => !w.fixed);
+    const fixed = waves.filter((w) => w.fixed).sort((a, b) => a.at - b.at);
+    const gapOf = (w) => w.gap ?? level.waveGap ?? null;
+    const clearAdvance = level.advanceWhenClear !== false;
+    const clearDelay = T.levels.clearDelay ?? 2.5;
     const warnings = [...T.levels.timerWarnings].sort((a, b) => b - a);
     const pa = createPaScript(ctx, level.pa || []);
-    let nextWave = 0;
+    let nextReg = 0;
+    let openedCount = 0;
     let lastActivity = 0;
     // one-off teaching hints (level.hints): pa:announce { text, mood, hint: true, hintId }
     //   pinned:  { text }            drum held near max speed ~3 s with live donors and no kills
@@ -37,11 +53,13 @@ export default {
       result: null,
       spawner,
       clock: { t: 0, duration: level.duration, left: level.duration },
-      waves: { total: waves.length, opened: 0 },
+      // opened = waves opened so far (any kind); nextIn = s until the next wave is due (null: none
+      // left); nextIndex = level.waves index of that wave (waves may open out of array order)
+      waves: { total: waves.length, opened: 0, nextIn: null, nextIndex: null },
       donorsTotal: waves.reduce((s, w) => s + (w.count || 0), 0),
       /** donors still to process (queued + alive), Inspectors excluded (they are not product) */
       get donorsLeft() {
-        const queued = spawner.pendingTargets + waves.slice(nextWave).reduce((s, w) => s + targetCount(w), 0);
+        const queued = spawner.pendingTargets + waves.filter((w) => !w.opened).reduce((s, w) => s + targetCount(w), 0);
         return queued + ctx.donors.filter((d) => d.alive && !d.mustSurvive).length;
       },
 
@@ -53,23 +71,37 @@ export default {
         const alive = c.aliveTargets;
         if (alive > 0 || spawner.pending > 0) lastActivity = t;
 
-        const w = waves[nextWave];
-        if (w) {
-          if (level.advanceWhenClear !== false && alive === 0 && spawner.pending === 0 && t - lastActivity > 2.5 && nextWave > 0) {
-            w.due = Math.min(w.due, t + T.levels.waveWarning);
-          }
-          if (!w.warned && t >= w.due - T.levels.waveWarning) {
+        const warn = T.levels.waveWarning;
+        const clear = clearAdvance && openedCount > 0 && alive === 0 && spawner.pending === 0 && t - lastActivity > clearDelay;
+        const reg = regular[nextReg] || null;
+        if (reg && clear) reg.due = Math.min(reg.due, t + warn);
+        const fx = fixed.find((w) => !w.opened) || null;
+        if (fx && !reg && clear) fx.due = Math.min(fx.due, t + warn);
+        let nextDue = Infinity; let nextIndex = null;
+        for (const w of [reg, ...fixed]) {
+          if (!w || w.opened) continue;
+          if (!w.warned && t >= w.due - warn) {
             w.warned = true;
             c.emit('wave:incoming', { count: w.count, wave: w.index });
           }
           if (t >= w.due) {
             w.opened = true;
             spawner.openWave(w);
-            nextWave++;
-            mode.waves.opened = nextWave;
+            openedCount++;
+            mode.waves.opened = openedCount;
             lastActivity = t;
-          }
+            if (w === reg) {
+              nextReg++;
+              const nx = regular[nextReg];
+              if (nx && gapOf(nx) != null) nx.due = t + gapOf(nx); // timer runs from this opening
+            }
+          } else if (w.due < nextDue) { nextDue = w.due; nextIndex = w.index; }
         }
+        // a regular wave queued behind one that just opened
+        const nr = regular[nextReg];
+        if (nr && !nr.opened && nr.due < nextDue) { nextDue = nr.due; nextIndex = nr.index; }
+        mode.waves.nextIn = Number.isFinite(nextDue) ? Math.max(0, nextDue - t) : null;
+        mode.waves.nextIndex = nextIndex;
         spawner.step(dt);
 
         while (warnings.length && mode.clock.left <= warnings[0]) {
@@ -91,7 +123,7 @@ export default {
       postStep(c) {
         c.pool.volume = c.blood.collected;
         if (mode.status !== 'running') return;
-        const allSpawned = nextWave >= waves.length && spawner.pending === 0;
+        const allSpawned = openedCount >= waves.length && spawner.pending === 0;
         const lastDeath = c.donors.reduce((m, d) => Math.max(m, d.deathTime), -1);
         if (allSpawned && c.aliveTargets === 0 && c.donors.length > 0 && mode.clock.t - Math.max(lastDeath, lastActivity) >= T.scoring.processedDelay) {
           const bonus = mode.clock.left * T.scoring.earlyFinishPerSecond;
@@ -116,6 +148,8 @@ export default {
       mode.status = 'ended';
       // end-of-shift hooks first (Inspector compliance bonus) so they count toward the rating
       for (const d of c.donors) if (d.def.onShiftEnd) d.def.onShiftEnd(c, d);
+      // compliance bonuses held because the donors had not met q1 yet: pay or withhold now
+      c.scoring.settleCompliance(c);
       const liters = Math.round(c.scoring.liters * 10) / 10;
       const result = liters >= level.quota[0] ? 'complete' : failKind;
       const stars = result === 'complete' ? starsFor(liters, level.quota) : 0;
@@ -127,6 +161,11 @@ export default {
         time: Math.round(mode.clock.t * 10) / 10, timeLeft: Math.round(mode.clock.left * 10) / 10,
         donorsTotal: mode.donorsTotal, causes: { ...c.scoring.causes },
         inspectorDeaths: c.scoring.inspectorDeaths, inspectorsSaved: c.scoring.inspectorsSaved,
+        // compliance bonus not paid because donations alone were below q1 (L, and how many Inspectors)
+        complianceWithheld: Math.round(c.scoring.compliance.withheld * 10) / 10,
+        complianceWithheldCount: c.scoring.compliance.withheldCount,
+        // litres lost with drowned donors' bodies (blood that never reached the tank)
+        wasted: Math.round((c.blood.wasted || 0) * 10) / 10,
         quota: level.quota.slice(), name: level.name, variant: level.variant || null,
       };
       mode.result.report = shiftReport(c, level, mode.result);

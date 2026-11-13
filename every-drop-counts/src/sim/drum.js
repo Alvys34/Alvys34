@@ -42,11 +42,17 @@ export function stepDrum(ctx, dt) {
     }
     w += acc * dt;
   } else {
+    // released: exponential coast + a constant "settle" deceleration (a heavy machine whose motor
+    // holds it: it stops firmly within a few degrees instead of drifting like ice)
     w *= Math.exp(-D.coastDamping * dt);
+    w = towardZero(w, (D.settleDecel || 0) * dt);
     if (Math.abs(w) < D.holdBelow) w *= Math.exp(-D.holdDamping * dt);
     if (Math.abs(w) < 1e-4) w = 0;
   }
-  if (drum.input.brake) w *= Math.exp(-D.brakeDamping * dt);
+  if (drum.input.brake) {
+    w *= Math.exp(-D.brakeDamping * dt);
+    w = towardZero(w, (D.brakeDecel || 0) * dt);
+  }
   if (w > D.maxOmega) w = D.maxOmega;
   if (w < -D.maxOmega) w = -D.maxOmega;
 
@@ -70,6 +76,13 @@ export function stepDrum(ctx, dt) {
       ctx.emit('slam:ready', {});
     }
   }
+}
+
+/** reduce |w| by `by` without crossing zero */
+function towardZero(w, by) {
+  if (w > 0) return Math.max(0, w - by);
+  if (w < 0) return Math.min(0, w + by);
+  return 0;
 }
 
 /** Try to SLAM (consumes drum.slamRequest). Returns true if it fired. */

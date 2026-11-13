@@ -20,7 +20,7 @@ const nowMs = () => (typeof performance !== 'undefined' && performance.now ? per
 const WARM_ORDER = [
   'mi_ep', 'mi_bass', 'mi_vib', 'md_shaker', 'md_brush', 'uiHover', 'uiClick', 'uiBack', 'lpNoise', 'lpPatter', 'lpGrind', 'lpAlarm',
   'mi_flute', 'md_rim', 'md_kick', 'jingleStart', 'paCalm', 'paSpeech', 'squelch', 'splat', 'thud', 'crack', 'vHurt', 'vDeath', 'vSpawn',
-  'slam', 'hatch', 'intakeBell', 'shunk', 'sawCut', 'splash', 'splatBig', 'rip', 'spurt',
+  'slam', 'hatch', 'intakeBell', 'shunk', 'sawCut', 'splash', 'splatBig', 'rip', 'spurt', 'gurgle',
 ];
 
 export class Engine {

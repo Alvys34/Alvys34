@@ -186,9 +186,28 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
         .sort((a, b) => (a.blood > 0) - (b.blood > 0) || a.detachedAt - b.detachedAt);
       for (let i = 0; i < detached - T.sim.debrisCap; i++) removePart(c, cand[i], { release: false });
     }
-    // body budget: dissolve the oldest corpses
     let bodies = 0;
     for (const d of c.dyns) if (!d.removed) bodies++;
+    // crowded (fix round 2, PLAYTEST-1 M7): above T.sim.crowdBodies live bodies, drained debris and
+    // fully drained corpses are junk: dissolve them (oldest first, a few per step to spread the cost)
+    if (bodies > (T.sim.crowdBodies ?? Infinity)) {
+      let budget = Math.min(T.sim.crowdDissolvePerStep ?? 6, bodies - T.sim.crowdBodies);
+      const junk = [];
+      for (const p of c.parts) {
+        if (p.removed || p.blood > 1e-3 || p.grinding || p.impaled) continue;
+        const dn = p.donor;
+        if (p.severed && c.time - p.detachedAt > (T.sim.crowdDrainedAfter ?? 0.5)) junk.push(p);
+        else if (!dn.alive && !dn.left && dn.blood <= dn.bloodMax * 0.02 && c.time - dn.deathTime > 2) junk.push(p);
+      }
+      junk.sort((a, b) => (a.severed ? a.detachedAt : a.donor.deathTime) - (b.severed ? b.detachedAt : b.donor.deathTime));
+      for (let i = 0; i < junk.length && budget > 0; i++, budget--) {
+        const p = junk[i];
+        removePart(c, p, { release: false });
+        c.emit('part:dissolve', { id: p.donor.id, part: p.name }, [p.x, p.y, p.z]);
+        bodies--;
+      }
+    }
+    // body budget: dissolve the oldest corpses
     if (bodies > T.sim.maxBodies - 22) {
       const dead = c.donors.filter((d) => !d.alive && !d.gone).sort((a, b) => a.deathTime - b.deathTime);
       if (dead.length) for (const p of dead[0].partList) if (!p.removed) removePart(c, p, { release: false });
@@ -237,7 +256,10 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
       slam: { cooldown: round3(c.drum.slamCooldown), ready: c.drum.slamCooldown <= 0, count: c.drum.slamCount },
       hazards: c.hazards.map((h) => ({ id: h.id, type: h.type, load: round3(h.load) })),
       props: c.props.filter((p) => !p.removed).map((p) => ({ id: p.id, type: p.type, state: p.view && p.view.state, hits: p.view && p.view.hits })),
-      inspectors: c.donors.filter((d) => d.mustSurvive).map((d) => ({ id: d.id, alive: d.alive, encased: !!d.encased, hits: d.sphere ? d.sphere.view.hits : null })),
+      // Inspectors in the drum (alive or dead). One who LEFT after his visit (shift 8) is not
+      // listed (he is neither aboard nor an incident: LOCAL-REPORT-1 #10); see inspectorsLeft.
+      inspectors: c.donors.filter((d) => d.mustSurvive && !d.left).map((d) => ({ id: d.id, n: d.inspectorNo || null, alive: d.alive, encased: !!d.encased, hits: d.sphere ? d.sphere.view.hits : null })),
+      inspectorsLeft: c.donors.filter((d) => d.mustSurvive && d.left).length,
       aliveTargets: c.aliveTargets,
       overtime: m.overtime || null,
       blood: { pending: round3(c.blood.pending), dissolved: round3(c.blood.dissolved) },
@@ -269,6 +291,6 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
   return api;
 }
 
-const POSITIONAL = new Set(['hatch:open', 'donor:spawn', 'donor:hurt', 'donor:death', 'limb:sever', 'limb:break', 'impact', 'blood:spurt', 'blood:splat', 'splash', 'hazard:contact', 'hazard:telegraph', 'grinder:clog', 'grinder:clear', 'prop:puncture', 'prop:explode', 'sphere:crack', 'sphere:shatter']);
+const POSITIONAL = new Set(['hatch:open', 'donor:spawn', 'donor:hurt', 'donor:death', 'donor:drowning', 'limb:sever', 'limb:break', 'impact', 'blood:spurt', 'blood:splat', 'splash', 'hazard:contact', 'hazard:telegraph', 'grinder:clog', 'grinder:clear', 'prop:puncture', 'prop:explode', 'sphere:crack', 'sphere:shatter']);
 
 function round3(v) { return Math.round(v * 1000) / 1000; }

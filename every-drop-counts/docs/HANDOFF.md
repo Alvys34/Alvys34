@@ -126,8 +126,9 @@ Bots are proxies. "On target" means the difficulty shape is right, not that it i
   VC++ 2015–2022 x64 redistributable ticked in Steamworks.
 - **Not visually confirmed:** oxygen tank explosion debris, the grinder's amber jam lamp,
   4K layout, browser fullscreen.
-- **Title is a working title.** "Every Drop Counts" and the fictional brand "DRAINWELL" have not
-  been checked against existing Steam titles or trademarks.
+- **Title is a working title.** "Every Drop Counts" has not been checked against existing Steam titles. The fictional brand was
+  renamed to the provisional SUNNYVEIN (the previous name is a live US trademark); the final name is
+  not confirmed. It lives in one line in `src/core/brand.js`.
 - **Repo location:** this lives in a subfolder of a GitHub profile repo. It should move to its own
   repository before release.
 

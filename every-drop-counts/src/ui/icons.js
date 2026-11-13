@@ -47,7 +47,7 @@ export function icon(name, cls = '') {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
-/** DRAINWELL logo mark: a white drop in a mint rounded square with a small medical cross. */
+/** Brand logo mark: a white drop in a mint rounded square with a small medical cross. */
 export function logoMark(cls = '') {
   return `<svg class="logo-mark ${cls}" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
     <rect x="1" y="1" width="46" height="46" rx="13" fill="var(--mint)"/>

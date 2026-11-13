@@ -1,21 +1,24 @@
 /**
- * Fixed front camera (VFX owns): mild perspective, framing that ADAPTS to the rotating drum so the
- * whole interior is always on screen at every drum angle and aspect ratio (4:3 .. 21:9, Deck
- * 16:10), while donors stay as large as possible.
+ * Fixed front camera (VFX owns): mild perspective and a CONSTANT base framing (fix round 2,
+ * PLAYTEST-1 M3 / LOCAL-REPORT-1 §2.1: the old per-angle fit swung the on-screen scale ~1.8x and
+ * lurched 35 % in 0.25 s on spin-up).
  *
  *   createCameraRig(ctx) -> { update(dt, state), resize(w, h), shake(amount), kick(x, y, amount),
- *                             setScreenShake(v), fit(), playEnding(), stopEnding(), onLevel(), dispose() }
+ *                             setScreenShake(v), fit(), playEnding(), stopEnding(), onLevel(), dispose(),
+ *                             distance, baseDistance, requiredDistance, tighten (0..1) }
  *
- * Fit: the drum's front opening (2HW x 2HH at z = +HD, the largest thing in perspective) rotated by
- * the drum angle has world half-extents ex = |c|HW + |s|HH, ey = |s|HW + |c|HH. The camera distance
- * is the larger of the vertical/horizontal requirement + a small safe margin (2.5 % of the screen,
- * + 1.2 % for shake at full screenShake). Only the INTERIOR counts: frame, gear rim and facility
- * crop freely. While the HUD is up (settings.hudInsets) and a mid-depth interior corner would sit under
- * a top-corner plate, a top band (<= 12 %) is reserved: the drum shrinks a little and moves down. It ANTICIPATES rotation
- * (max extent over the angles swept in the next ~0.7 s), zooms with a critically damped spring whose
- * speed is capped (out <= 90 %/s, in <= 16 %/s, in only after a 0.5 s hold), and is hard-clamped so
- * the current extent can never crop. Zoom punch only uses slack above that clamp. Held still at 0 deg the drum fills the frame;
- * while it spins the view settles on the worst-case framing instead of pumping.
+ * Base: fits the drum interior's CIRCUMSCRIBED CIRCLE (radius hypot(HW, HH) of the front opening at
+ * z = +HD, the largest thing in perspective), + a small safe margin (2.5 % of the screen, + 1.2 % for
+ * shake at full screenShake), + a top band for the HUD plates (settings.hudInsets; <= 12 %, the worst
+ * case over all drum angles, so it does not change with the angle either). Every drum angle fits,
+ * so while the drum turns NOTHING zooms. Only the INTERIOR counts: frame, gear rim and facility crop freely.
+ *
+ * Rest tighten: once |omega| has stayed below REST_OMEGA for REST_HOLD s the camera eases in (smooth,
+ * ~TIGHTEN_TIME s) to at most 1 + TIGHTEN_MAX x cameraZoomRange (default 1 -> 1.25x the base scale),
+ * never past what fits the drum at its current angle (upright: the full 1.25x, 45 deg: ~3 %). When
+ * rotation resumes it eases back out at <= EASE_OUT_RATE of the distance per second (a brief crop of
+ * the drum corners is accepted). settings.cameraZoomRange = 0 -> fully fixed framing.
+ * Zoom punch (combos, explosions; <= 3 %) only uses slack above the current angle's no-crop distance.
  *
  * Motion: idle sway, trauma-based shake (impacts, severs, deaths, explosions), a spring "kick"
  * (slam = vertical jolt; events push away from their screen position) and a zoom punch on combos.
@@ -35,21 +38,27 @@ export function createCameraRig(ctx) {
   // while the HUD is visible). When a drum corner (at mid-depth) would sit under a plate, the camera
   // reserves a top band (drum shrinks a little and moves down), capped at RESERVE_MAX of the height.
   const RESERVE_MAX = 0.12;
-  const LOOKAHEAD = 0.7;     // s of rotation anticipated (zoom-out starts before it is needed)
-  const ZOOM_OUT_RATE = 0.9; // max relative zoom speed (fraction of distance per second)
-  const ZOOM_IN_RATE = 0.16;
-  // 1 = fully adaptive (tightest framing per angle), 0 = always the worst-case (diagonal) framing.
+  const RESERVE_RATE = 0.08;   // top band change speed (fraction of the height per second)
+  const REST_OMEGA = 0.15;     // rad/s: below this the drum counts as "at rest"
+  const REST_HOLD = 0.8;       // s at rest before the camera starts to tighten
+  const TIGHTEN_WN = 3.2;      // ease-in spring (critically damped): ~95 % of the way in ~1.5 s
+  const TIGHTEN_RATE = 0.2;    // max distance shrink per second while tightening (<= 5 % / 0.25 s)
+  const TIGHTEN_MAX = 0.25;    // max extra scale at rest (x cameraZoomRange): 1.25x the base
+  const EASE_OUT_RATE = 0.28;  // max distance growth per second when rotation resumes (<= 7.3 % / 0.25 s)
+  // settings.cameraZoomRange default: full tighten (0 = fixed framing)
   const ZOOM_RANGE = 1;
   const DIAG = Math.hypot(HW, HH);
   camera.fov = FOV;
   camera.near = 0.5; camera.far = 220;
   camera.updateProjectionMatrix();
 
-  let dist = 0; let holdT = 0; let snap = true;
+  let dist = 0; let snap = true;
   let trauma = 0; let punch = 0; let t = 0;
   let kx = 0; let ky = 0; let kvx = 0; let kvy = 0;
   let curH = 1; let lastReq = 0; let zvel = 0; let marginFrac = MARGIN_FRAC;
   let reserve = 0; // current top band (fraction of the screen height), smoothed
+  let restT = 0;   // s the drum has been at rest
+  let baseDist = 0; let baseReserve = 0; let baseKey = '';
   // ending (shift 8): camera drifts from the front view into the intake hatch
   let ending = null; // { t, dur, p0, l0, fov0 } while playing
   const tmpV = { x: 0, y: 0, z: 0 };
@@ -76,13 +85,13 @@ export function createCameraRig(ctx) {
    * Smallest top band (0..RESERVE_MAX) that keeps the drum's mid-depth corners out of the HUD
    * plates at drum angle theta (the corner may also clear a plate by sitting inside its inner edge).
    */
-  function reserveFor(theta, ex, ey) {
+  function reserveFor(theta, distOf) {
     const ins = settings.hudInsets;
     if (!ins || !(ins.top > 0)) return 0;
     const c = Math.cos(theta); const s = Math.sin(theta);
     const tv = Math.tan((camera.fov * Math.PI) / 360); const th = tv * camera.aspect;
     for (let r = 0; r <= RESERVE_MAX + 1e-6; r += 0.01) {
-      const d = Math.max(required(ex, ey, r), 1e-3);
+      const d = Math.max(distOf(r), 1e-3);
       const zc = HD + d; // camera z; corners at z = 0 (mid-depth)
       const cy = r * d * tv;
       let ok = true;
@@ -161,45 +170,47 @@ export function createCameraRig(ctx) {
     if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
 
+  /** cameraZoomRange setting (0..1): scales the rest tighten (0 = fixed framing) */
+  const zoomRange = () => (settings.cameraZoomRange != null ? Math.max(0, Math.min(1, Number(settings.cameraZoomRange) || 0)) : ZOOM_RANGE);
+  const circleDist = (r) => required(DIAG, DIAG, r);
+
   function fit(dt, state) {
     const theta = ctx.drumAngle;
-    const w = state && state.drum ? state.drum.omega : 0;
     marginFrac = MARGIN_FRAC + SHAKE_FRAC * shakeAmount();
+    // base HUD band: the worst case over every drum angle at the circle framing (cached per layout)
+    const ins = settings.hudInsets;
+    const key = `${camera.aspect.toFixed(4)}|${camera.fov}|${marginFrac.toFixed(4)}|${ins ? `${ins.top},${ins.left},${ins.right}` : '-'}`;
+    if (key !== baseKey) {
+      baseKey = key; baseReserve = 0;
+      if (ins && ins.top > 0) for (let k = 0; k < 36 && baseReserve < RESERVE_MAX; k++) baseReserve = Math.max(baseReserve, reserveFor((k / 36) * Math.PI, circleDist));
+    }
     extents(theta, e2);
     const ex0 = e2[0]; const ey0 = e2[1];
-    // anticipate where the drum is going
-    let ex = e2[0]; let ey = e2[1];
-    const sweep = w * LOOKAHEAD;
-    for (let k = 1; k <= 6; k++) {
-      extents(theta + (sweep * k) / 6, e2);
-      if (e2[0] > ex) ex = e2[0];
-      if (e2[1] > ey) ey = e2[1];
+    if (state && state.drum && dt > 0) {
+      if (Math.abs(state.drum.omega) < REST_OMEGA) restT += dt; else restT = 0;
     }
-    // top band for the HUD plates: the worst over the angles about to be swept, eased in/out
-    let rTarget = reserveFor(theta, ex0, ey0);
-    if (rTarget < RESERVE_MAX && Math.abs(sweep) > 0.05) {
-      for (let k = 2; k <= 6; k += 2) { const a = theta + (sweep * k) / 6; extents(a, e2); rTarget = Math.max(rTarget, reserveFor(a, e2[0], e2[1])); }
-    }
-    if (snap || dist <= 0 || !(dt > 0)) reserve = rTarget;
-    else reserve += (rTarget - reserve) * Math.min(1, dt * (rTarget > reserve ? 6 : 1.5));
-    const need = required(ex0, ey0);
-    const zr = settings.cameraZoomRange != null ? Math.max(0, Math.min(1, Number(settings.cameraZoomRange) || 0)) : ZOOM_RANGE;
-    const worst = required(DIAG, DIAG);
-    const target = Math.max(need, worst + (required(ex, ey) - worst) * zr);
+    const zr = zoomRange();
+    const maxTight = 1 + TIGHTEN_MAX * zr;
+    const resting = zr > 0 && restT >= REST_HOLD;
+    // the tight framing never crops the drum at its current angle
+    const tightDist = (r) => Math.max(circleDist(r) / maxTight, required(ex0, ey0, r));
+    const rTarget = resting ? reserveFor(theta, tightDist) : baseReserve;
+    if (snap || dist <= 0) reserve = rTarget;
+    else if (dt > 0) reserve += Math.max(-RESERVE_RATE * dt, Math.min(RESERVE_RATE * dt, rTarget - reserve));
+    baseDist = circleDist(reserve);
+    const need = required(ex0, ey0, reserve); // tightest no-crop distance at this angle
     lastReq = need;
-    if (snap || dist <= 0) { dist = target; snap = false; holdT = 0.5; zvel = 0; } else if (dt > 0) {
-      // critically damped spring on distance, with a capped zoom speed (no lurches)
-      let goal = dist;
-      if (target > dist) { goal = target; holdT = 0.5; } else { holdT -= dt; if (holdT <= 0) goal = target; }
+    const goal = resting ? Math.max(baseDist / maxTight, need) : baseDist;
+    if (snap || dist <= 0) { dist = baseDist; zvel = 0; restT = 0; snap = false; } else if (dt > 0) {
+      // critically damped spring (smooth start and stop), speed-capped both ways
       const out = goal > dist;
-      const wn = out ? 9 : 2.2;
+      const wn = out ? 4 : TIGHTEN_WN;
       zvel += ((goal - dist) * wn * wn - 2 * wn * zvel) * dt;
-      const cap = dist * (out ? ZOOM_OUT_RATE : ZOOM_IN_RATE);
+      const cap = dist * (out ? EASE_OUT_RATE : TIGHTEN_RATE);
       if (zvel > cap) zvel = cap; else if (zvel < -cap) zvel = -cap;
       dist += zvel * dt;
-      if (!out && dist < goal) { dist = goal; zvel = 0; }
+      if ((zvel < 0 && dist < goal) || (zvel > 0 && dist > goal)) { dist = goal; zvel = 0; }
     }
-    if (dist < need) { dist = need; if (zvel < 0) zvel = 0; } // never crop the interior
     const tv = Math.tan((camera.fov * Math.PI) / 360);
     curH = dist * tv;
   }
@@ -210,7 +221,11 @@ export function createCameraRig(ctx) {
     kick(x, y, a) { kick(x, y, a); },
     setScreenShake(v) { settings.screenShake = v; },
     get distance() { return dist; },
+    /** constant base framing distance (circumscribed circle + margin + HUD band) */
+    get baseDistance() { return baseDist; },
     get requiredDistance() { return lastReq; },
+    /** current framing scale relative to the base (1 .. 1.25 at rest), punches excluded */
+    get scale() { return dist > 0 ? baseDist / dist : 1; },
     fit() { fit(0, null); return dist; },
     update(dtIn, state) {
       const dt = Math.max(0, Math.min(0.1, dtIn || 0));
@@ -227,8 +242,8 @@ export function createCameraRig(ctx) {
       const sway = 0.05 * A;
       const kxs = Math.max(-0.15, Math.min(0.15, kx * A)); const kys = Math.max(-0.15, Math.min(0.15, ky * A));
       const cy = reserve * curH;
-      // zoom punch only uses the slack above the no-crop distance
-      const z = HD + Math.max(lastReq, dist * (1 - 0.03 * punch * A));
+      // zoom punch (<= 3 %) only uses the slack above the no-crop distance, and never pushes out
+      const z = HD + Math.max(Math.min(dist, lastReq), dist * (1 - 0.03 * punch * A));
       const ox = Math.sin(t * 0.21 * Math.PI * 2 * 0.25) * sway + n(1) * s * 0.14 + kxs;
       const oy = Math.sin(t * 0.17 * Math.PI * 2 * 0.25 + 1.3) * sway * 0.6 + n(2) * s * 0.14 + kys;
       camera.position.set(ox, cy + oy, z);

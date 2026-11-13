@@ -14,9 +14,10 @@ import { HUMANOID } from '../../sim/donors/humanoid.js';
 import { bloodColors } from '../blood/palette.js';
 import { toTexture } from '../environment/textures.js';
 import { faceAtlasCanvas, FACE } from './faces.js';
-import { buildPartGeometries, buildHairGeometry, buildStumpGeometries } from './bodyparts.js';
+import { buildPartGeometries, buildHairGeometry, buildStumpGeometries, HAIR } from './bodyparts.js';
 import { createDonorMaterials } from './material.js';
 import { resolveLook } from './looks.js';
+import { createDrownMeters } from './drown.js';
 
 const ROLES = ['head', 'chest', 'pelvis', 'upperArm', 'forearm', 'thigh', 'shin'];
 const CAP = { head: 72, chest: 72, pelvis: 72, upperArm: 150, forearm: 150, thigh: 150, shin: 150 };
@@ -99,6 +100,9 @@ export function createDonorViews(ctx) {
     drumGroup.add(m);
   }
 
+  // drowning "air" gauges + bubbles over submerged live donors (one draw call)
+  const drown = createDrownMeters(ctx, drumGroup);
+
   ctx.donorAccessoriesHandled = true; // hats/hair are ours (placeholder hats off)
   const looks = new WeakMap();
   const info = new WeakMap(); // per donor: { face, worriedUntil }
@@ -146,6 +150,7 @@ export function createDonorViews(ctx) {
     update(dt, state, alpha) {
       time += dt;
       for (const k in meshes) meshes[k].count = 0;
+      drown.begin();
       let ns = 0;
       for (const p of state.parts) {
         if (p.removed) continue;
@@ -174,11 +179,14 @@ export function createDonorViews(ctx) {
         const pDrain = p.bloodMax > 0 ? 1 - p.blood / p.bloodMax : 0;
         writeInst(key, i, L, dmg + (opened ? 2 : 0), face, Math.max(dDrain, pDrain * 0.85));
         if (key === 'head') {
+          if (d.alive && !d.encased) drown.add(pos.x, pos.y, pos.z, d.drown01 ?? 0, d.id ?? 0);
           const hm = hairMeshes[L.hairStyle];
           if (hm && hm.count < 40) {
             const hi = hm.count++;
             hm.setMatrixAt(hi, m4);
-            writeInst(hm.userData.key, hi, L, 0, face, 0);
+            // hard hats glow a little (damage slot -1 = self-lit): the Inspector's orange hat reads
+            // through his sphere and under the red emergency light
+            writeInst(hm.userData.key, hi, L, L.hairStyle === HAIR.HARDHAT ? -1 : 0, face, 0);
           }
         }
         // severed stumps: flat blood cap + bone nub aligned with the joint direction
@@ -209,8 +217,11 @@ export function createDonorViews(ctx) {
       }
       caps.count = ns; caps.instanceMatrix.needsUpdate = true;
       bones.count = ns; bones.instanceMatrix.needsUpdate = true;
+      drown.end(dt, state);
     },
-    onLevel() {},
+    onLevel() { drown.clear(); },
+    /** drowning gauges (debug: `drownMeters.debugValue = 0.6` forces a value on every live donor) */
+    drownMeters: drown,
     setQuality(q, name) {
       for (const k in meshes) meshes[k].castShadow = !!q.shadows;
     },
@@ -218,6 +229,7 @@ export function createDonorViews(ctx) {
       for (const k in meshes) { drumGroup.remove(meshes[k]); meshes[k].dispose(); }
       for (const k in outlines) drumGroup.remove(outlines[k]);
       drumGroup.remove(caps); drumGroup.remove(bones); caps.dispose(); bones.dispose();
+      drown.dispose();
       for (const d of disposables) d.dispose();
     },
   };

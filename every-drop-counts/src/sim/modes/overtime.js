@@ -42,6 +42,7 @@ export const OVERTIME_LEVEL = {
     drainBase: 0.32,       // L/s when the pump starts
     drainGrowth: 0.0165,   // L/s added per second after the grace period (~3 L/s at 3 min, ~6 at 6 min)
     drainPerWave: 0.02,    // L/s added per wave opened
+    demandTierStep: 1.0,   // L/s of drain per HUD demand tier (summary.overtime.demandTier, never caps)
     firstWaveAt: 1.5,
     waveEvery: [19, 9],    // s between waves: start -> minimum
     waveEveryRamp: 300,    // s to go from the first to the second
@@ -156,12 +157,19 @@ export default {
             tank: Math.round(tank * 100) / 100, tankMax: Math.round(tankMax * 10) / 10,
             drainRate: Math.round(mode.drainRate * 1000) / 1000, wave: waveIndex,
             nextWaveIn: Math.max(0, Math.round((nextWaveAt - mode.clock.t) * 10) / 10),
-            demandLevel: Math.min(1, mode.drainRate / 2.0),
+            demandLevel: Math.min(1, mode.drainRate / 2.0), // legacy 0..1 (pins at 2 L/s, ~2 min)
+            // fix round 2 (PLAYTEST-1 M1): meaningful for the whole run
+            demandRate: Math.round(mode.drainRate * 100) / 100,   // L/s the pump drains now
+            demandTier: demandTier(mode.drainRate),               // 0 before the pump, then 1, 2, 3 ... (never caps)
+            demandIn: demandIn(mode.drainRate),                   // 0..1 progress toward the next tier
             drained: Math.round(mode.drained * 10) / 10,
           },
         };
       },
     };
+
+    function demandTier(rate) { return rate > 0 ? 1 + Math.floor(rate / (O.demandTierStep || 1)) : 0; }
+    function demandIn(rate) { const s = O.demandTierStep || 1; return rate > 0 ? Math.round(((rate % s) / s) * 1000) / 1000 : 0; }
 
     function waveCount(i) { return Math.min(O.waveCount[1], O.waveCount[0] + Math.floor(i / O.countEvery)); }
 

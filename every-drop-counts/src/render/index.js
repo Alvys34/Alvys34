@@ -28,7 +28,8 @@ import { createCameraRig } from './camera.js';
 import { createPost } from './post.js';
 import { createPropViews } from './donors/props.js'; // ART props (oxygen tank, safety sphere); replaces CONTENT placeholders
 
-import { QUALITY, createQualityGovernor } from './quality.js'; // presets + auto-degradation (VFX)
+import { QUALITY, LOAD_STEPS, createQualityGovernor } from './quality.js'; // presets + auto-degradation (VFX)
+import { createPrecompiler } from './precompile.js'; // shader warm-up at level load (no first-use hitches)
 import { setBloodColor, getBloodColor } from './blood/palette.js'; // the one blood colour source (VFX)
 
 export { QUALITY };
@@ -73,6 +74,7 @@ export function createRenderer({ canvas, bus, settings = {} }) {
   let lastLevel = null;
   let lastState = null;
 
+  let lastW = 0; let lastH = 0;
   function resize() {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
@@ -80,53 +82,78 @@ export function createRenderer({ canvas, bus, settings = {} }) {
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
-    if (ctx.cameraRig.resize) ctx.cameraRig.resize(w, h);
+    // only a real size change re-frames the camera (a pixel-ratio change must not snap the zoom)
+    if ((w !== lastW || h !== lastH) && ctx.cameraRig.resize) ctx.cameraRig.resize(w, h);
+    lastW = w; lastH = h;
     post.resize(w, h);
   }
 
+  // post quality = the preset, minus bloom/CA while the governor's load level is 2
+  let postLite = false;
+  function applyPostQuality() {
+    const q = QUALITY[ctx.qualityName];
+    if (post.setQuality) post.setQuality(postLite ? { ...q, bloom: 0, ca: false } : q, ctx.qualityName);
+  }
   function applyPreset(name) {
     const q = QUALITY[name];
     if (!q) return false;
     ctx.quality = q; ctx.qualityName = name;
     renderer.shadowMap.enabled = q.shadows;
     for (const p of pieces) if (p.setQuality) p.setQuality(q, name);
-    if (post.setQuality) post.setQuality(q, name);
+    applyPostQuality();
     resize();
     return true;
   }
-  // automatic degradation (quality.js): level 1-2 shrink particle/stamp budgets, 2 drops bloom, 3 pixel ratio
+  const precompiler = createPrecompiler(ctx, { post });
+  ctx.precompiler = precompiler;
+  // automatic quality (quality.js): pixel ratio / preset / load levers, kept across each other's changes
   const governor = createQualityGovernor({
     getPreset: () => ctx.qualityName,
-    applyPreset,
+    applyPreset(name) { applyPreset(name); precompiler.request(lastState, 'quality'); },
     applyLevel(level) {
-      ctx.loadScale = level >= 2 ? 0.45 : level >= 1 ? 0.7 : 1;
-      const ps = level >= 3 ? 0.75 : 1;
-      const q = level >= 2 ? { ...QUALITY[ctx.qualityName], bloom: 0, ca: false } : QUALITY[ctx.qualityName];
-      if (post.setQuality) post.setQuality(q, ctx.qualityName);
-      if (ps !== ctx.pixelScale) { ctx.pixelScale = ps; resize(); }
+      ctx.loadScale = LOAD_STEPS[Math.max(0, Math.min(LOAD_STEPS.length - 1, level))];
+      const lite = level >= 2;
+      if (lite !== postLite) { postLite = lite; applyPostQuality(); }
     },
+    applyPixelScale(s) { if (s !== ctx.pixelScale) { ctx.pixelScale = s; resize(); } },
   });
-  try { governor.enabled = !new URLSearchParams(location.search).has('debug') || new URLSearchParams(location.search).has('autoq'); } catch { /* no location */ }
+  let autoqParam = false; let noPrewarm = false;
+  try {
+    const sp = new URLSearchParams(location.search);
+    autoqParam = sp.has('autoq');
+    noPrewarm = sp.has('noprewarm'); // A/B the shader warm-up (tools/qa/shaders.mjs)
+    governor.enabled = !sp.has('debug') || autoqParam;
+  } catch { /* no location */ }
   function setQuality(name) {
     if (!QUALITY[name]) return false;
-    ctx.loadScale = 1; ctx.pixelScale = 1;
+    governor.reset(name); // full quality at the player's preset (pixel scale 1, load 0)
+    ctx.loadScale = 1; ctx.pixelScale = 1; postLite = false;
     applyPreset(name);
-    governor.reset(name);
+    if (lastState) precompiler.request(lastState, 'quality');
     return true;
   }
-  let lastFrameAt = 0;
+  let lastFrameAt = 0; let skipCost = false; let lastHazards = null; let outlineMeshes = null;
+  const cost = { simMs: 0, busyMs: 0, skip: false };
 
   function update(state, alpha = 1, dt = 1 / 60, frame = null) {
     renderer.info.reset();
     const now = performance.now();
-    if (lastFrameAt) governor.frame((now - lastFrameAt) / 1000);
-    lastFrameAt = now;
+    if (lastFrameAt) {
+      // frame cost from the loop (main.js): sim ms this frame, main-thread ms of the previous frame
+      cost.simMs = frame && frame.simMs != null ? frame.simMs : null;
+      cost.busyMs = frame && frame.busyMs != null ? frame.busyMs : null;
+      cost.skip = skipCost || precompiler.busy;
+      governor.frame((now - lastFrameAt) / 1000, cost);
+    }
+    lastFrameAt = now; skipCost = false;
     if (!state) { post.render(dt, null, frame); return; }
     lastState = state; ctx.lastState = state;
     if (state.level !== lastLevel) {
       lastLevel = state.level;
       for (const p of pieces) if (p.onLevel) p.onLevel(state);
     }
+    // a new sim context (level load, retry, Overtime): warm every shader it can show
+    if (state.hazards !== lastHazards) { lastHazards = state.hazards; if (!noPrewarm) precompiler.request(state, 'level'); }
     const d = state.drum;
     ctx.drumAngle = d.prevTheta + (d.theta - d.prevTheta) * alpha;
     drumGroup.rotation.z = ctx.drumAngle;
@@ -134,11 +161,18 @@ export function createRenderer({ canvas, bus, settings = {} }) {
     const jolt = (d.prevJolt + (d.jolt - d.prevJolt) * alpha);
     drumGroup.position.y = Math.sin(jolt * Math.PI) * (state.T ? state.T.slam.jolt : 0.3) * jolt;
     for (const p of pieces) p.update(dt, state, alpha);
+    // low preset: no donor outlines (inverted hulls double the donor triangles; LOCAL-REPORT-1 §1)
+    if (ctx.qualityName === 'low') {
+      if (!outlineMeshes) outlineMeshes = drumGroup.children.filter((o) => o.isInstancedMesh && /-outline$/.test(o.name));
+      for (const o of outlineMeshes) o.visible = false;
+    }
+    if (precompiler.busy && precompiler.beforeRender(state, frame)) { skipCost = true; renderer.info.reset(); }
     post.render(dt, state, frame);
   }
 
   resize();
   setQuality(ctx.qualityName);
+  if (autoqParam) governor.benchmark(1.5); // ?autoq=1 (debug): as with the 'auto' setting (setAutoQuality)
 
   return {
     ctx, update, resize, setQuality,
@@ -168,16 +202,37 @@ export function createRenderer({ canvas, bus, settings = {} }) {
     playEnding() { return ctx.cameraRig.playEnding(); },
     stopEnding() { ctx.cameraRig.stopEnding(); },
     /** automatic quality degradation on/off (on by default outside ?debug=1) */
-    setAutoQuality(on) { governor.enabled = on; if (!on) { ctx.loadScale = 1; ctx.pixelScale = 1; applyPreset(ctx.qualityName); } },
+    /**
+     * Automatic quality on/off (on by default outside ?debug=1). Turning it on from a fresh preset
+     * (settings 'auto': the UI calls setQuality('high') first) starts a ~1.5 s benchmark on the frames
+     * behind the boot screen / menus, which picks the starting preset and pixel scale.
+     */
+    setAutoQuality(on) {
+      if (on) {
+        governor.enabled = true;
+        if (!governor.steps.length && !governor.benchmarking) governor.benchmark(1.5);
+      } else {
+        governor.enabled = false;
+        if (governor.steps.length || ctx.pixelScale !== 1 || ctx.loadScale !== 1) setQuality(governor.userPreset);
+      }
+    },
+    /** shader warm-up for the loaded level (also started automatically on every level load) */
+    prewarm(reason = 'level') { return precompiler.request(lastState, reason); },
+    /** a level warm-up is pending: hold the sim so the first interactive frame comes after it */
+    get warming() { return precompiler.blocking; },
     /** perf/quality report for the game / debug HUD */
     perf() {
       return {
         quality: ctx.qualityName, userQuality: governor.userPreset, autoLevel: governor.level, auto: governor.enabled,
-        frameMs: +governor.frameMs.toFixed(2), loadScale: ctx.loadScale, pixelRatio: renderer.getPixelRatio(),
+        frameMs: +governor.frameMs.toFixed(2), loadScale: ctx.loadScale, pixelScale: ctx.pixelScale, pixelRatio: renderer.getPixelRatio(),
+        governor: { steps: governor.steps, history: governor.history, bench: governor.benchResult, benchmarking: governor.benchmarking, upWait: governor.upWait },
+        shaders: precompiler.stats,
+        camera: { distance: +ctx.cameraRig.distance.toFixed(3), base: +ctx.cameraRig.baseDistance.toFixed(3), scale: +ctx.cameraRig.scale.toFixed(4) },
         blood: ctx.blood.stats ? ctx.blood.stats() : null, post: post.stats ? post.stats() : null,
       };
     },
     dispose() {
+      precompiler.dispose();
       for (const p of pieces) p.dispose();
       post.dispose();
       renderer.dispose();

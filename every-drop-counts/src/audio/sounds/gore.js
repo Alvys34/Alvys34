@@ -86,6 +86,26 @@ export const GORE = {
     },
   },
 
+  // A donor goes under (donor:drowning): short low gurgle + a rising cluster of bubbles, no splash.
+  gurgle: {
+    variants: 4,
+    render(sr, rnd) {
+      const dur = rr(rnd, 0.45, 0.6);
+      const out = buf(sr, dur + 0.05);
+      const g = gurgle(rnd, sr, rr(rnd, 18, 28), 0.9);
+      addNoise(out, sr, rnd, 0, dur * 0.8, 0.45, { type: 'lp', f: rr(rnd, 380, 520), q: 2.2, attack: 0.01, env: (u) => Math.sin(Math.PI * Math.min(1, u * 1.6)) * (1 - u), am: () => g() });
+      const nb = Math.floor(rr(rnd, 12, 18));
+      for (let i = 0; i < nb; i++) {
+        const t = rnd() * dur * 0.85;
+        const age = t / dur;
+        addBubble(out, sr, t, rr(rnd, 180, 520) * (1 + age * 0.8), rr(rnd, 0.02, 0.06), rr(rnd, 0.25, 0.6) * (1 - age * 0.5), rr(rnd, 0.5, 1.4));
+      }
+      filter(out, sr, 'lp', 2400, 0.7);
+      softClip(out, 1.2);
+      return fade(dcBlock(out, sr, 35), sr, 0.002, 0.06);
+    },
+  },
+
   // Something hits the blood pool: plop + spray + bubbles + slosh.
   splash: {
     variants: 6,

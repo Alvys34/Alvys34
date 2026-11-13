@@ -38,7 +38,7 @@ function voiceRate(type, id) {
 
 export function makeHandlers(eng) {
   const lastHurt = new Map();
-  let crushT = -9; let swallowT = -9;
+  let crushT = -9; let swallowT = -9; let drownT = -9;
   const rockets = [];
   let deathWindowT = -1, deathWindowN = 0;
 
@@ -165,6 +165,13 @@ export function makeHandlers(eng) {
       eng.patter += 0.3 + n;
       if (n > 0.75) P('splat', 'splatBig', { gain: 0.4 + 0.5 * n, pan: p.pan });
       else P('splat', 'splat', { gain: 0.15 + 0.85 * Math.pow(n, 1.5), pan: p.pan, rate: 1.15 - 0.3 * n });
+    },
+    'donor:drowning'(p) {
+      // a donor goes under: short gurgle, at most one every 0.5 s (crowds drown together)
+      const t = now();
+      if (t - drownT < 0.5) return;
+      drownT = t;
+      P('splash', 'gurgle', { gain: 0.75, pan: p && p.pan, rate: 0.9 + eng.rnd() * 0.2 });
     },
     splash(p) {
       const n = clamp01(pos(p.size)); // 0..1 from the sim, ~15/s while bodies churn in the pool
@@ -295,7 +302,7 @@ export function makeHandlers(eng) {
 }
 
 export const EVENT_NAMES = [
-  'shift:start', 'shift:end', 'wave:incoming', 'hatch:open', 'donor:spawn', 'donor:hurt', 'donor:death',
+  'shift:start', 'shift:end', 'wave:incoming', 'hatch:open', 'donor:spawn', 'donor:hurt', 'donor:death', 'donor:drowning',
   'limb:sever', 'limb:break', 'impact', 'blood:spurt', 'blood:splat', 'splash', 'hazard:contact',
   'hazard:telegraph', 'crusher:stroke', 'grinder:swallow', 'grinder:clog', 'grinder:clear', 'slam', 'slam:ready', 'combo', 'bonus', 'fine',
   'prop:puncture', 'prop:explode', 'sphere:crack', 'sphere:shatter', 'pa:announce', 'timer:warning',

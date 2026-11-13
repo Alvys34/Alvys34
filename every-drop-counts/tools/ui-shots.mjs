@@ -461,8 +461,78 @@ async function extras(browser) {
   }
 }
 
+// =============================================================== fix pass 2 evidence (--only fix2)
+// briefings 1/3/5/7 (lesson + "new this shift"), HUD prompt placement, drowning popup, Overtime
+// demand tier, report headlines at 1 and 3 drops, settings order. Names: fix2-ui-<size>-<what>.png
+async function fix2(browser) {
+  for (const [w, h] of SIZES) {
+    const tag = `fix2-ui-${w}x${h}`;
+    console.log(`\n== fix2 ${tag}`);
+    const page = await newPage(browser, w, h, { storage: JSON.stringify({ ...JSON.parse(SEED_SAVE), progress: { unlocked: 9 } }) });
+    await open(page);
+    await key(page, 'Enter', 600);
+    await shot(page, `${tag}-title`);
+    for (const n of [1, 3, 5, 7]) {
+      await page.evaluate(() => window.__edc.ui.debug.toTitle());
+      await sleep(300);
+      await page.evaluate((k) => window.__edc.ui.debug.brief(k), n);
+      await sleep(900);
+      check(await page.evaluate(() => !document.querySelector('.brief-tip').hidden && document.querySelector('.tip-t').textContent.length > 10), `${tag}: briefing ${n} shows the lesson`);
+      check(await page.evaluate(() => { const p = document.querySelector('.brief .side-panel'); return p.scrollHeight <= p.clientHeight + 1; }), `${tag}: briefing ${n} fits the panel`);
+      await shot(page, `${tag}-briefing-${n}`);
+    }
+    // shift 1 HUD: the rotate prompt sits above the drum, not on the spike bed
+    await page.evaluate(() => window.__edc.ui.debug.toTitle());
+    await sleep(300);
+    await page.evaluate(() => window.__edc.ui.debug.brief(1));
+    await sleep(600);
+    await key(page, 'Enter', 600);
+    await page.evaluate(() => window.__edc.setTimeScale(0));
+    await step(page, 150, 30);
+    // the prompt waits ~1.2 s of real frames (clamped dt; software WebGL renders ~1 frame/s)
+    await page.waitForFunction(() => !document.querySelector('.prompt').hidden, null, { timeout: 120000 }).catch(() => {});
+    check(await page.evaluate(() => { const p = document.querySelector('.prompt'); return !p.hidden && p.getBoundingClientRect().bottom < window.innerHeight * 0.2; }), `${tag}: rotate prompt shown in the top band`);
+    // a drowning popup over a live donor
+    await page.evaluate(() => {
+      const d = window.__edc.sim.ctx.donors.find((x) => x.alive && x.parts && x.parts.head);
+      if (d) { const hd = d.parts.head; window.__edc.bus.emit('donor:drowning', { id: d.id, x: hd.x, y: hd.y, z: hd.z, pan: 0, wasted: 2.4 }); }
+    });
+    await step(page, 30, 30);
+    await shot(page, `${tag}-hud-shift1-prompt`);
+    // Overtime HUD: jump the clock so the demand tier is > 1
+    await page.evaluate(() => { window.__edc.startOvertime(); window.__edc.setTimeScale(0); window.__edc.setInput({ rotate: 0.6 }); });
+    await step(page, 600, 0);
+    await page.evaluate(() => { window.__edc.setInput(null); const m = window.__edc.sim.ctx.mode; m.clock.t = 150; });
+    await step(page, 6, 6);
+    await sleep(600);
+    const dm = await page.evaluate(() => document.querySelector('.demand').innerText.replace(/\s+/g, ' '));
+    console.log(`  demand: ${dm}`);
+    check(/Tier [2-9]/.test(dm), `${tag}: Overtime demand shows a tier above 1 after 150 s`);
+    await shot(page, `${tag}-hud-overtime`);
+    // reports at 1 and 3 drops
+    await page.evaluate(() => window.__edc.ui.debug.showResults({ result: 'complete', liters: 7.1, stars: 1, levelId: 'shift-1', levelNumber: 1, collected: 7.1, bonus: 0, fines: 0, kills: 1, drownings: 0, bestCombo: 0, time: 105, donorsTotal: 15, causes: { impact: 1 }, report: { title: 'Meets expectations.', lines: ['Litres collected: 7.1', 'Drownings: 0. Exemplary.', 'Complaints received: 0 (donors unavailable for comment)', 'Cookies distributed: 0'] } }));
+    await sleep(3200);
+    check(await page.evaluate(() => document.querySelector('.headline').textContent) === 'Quota met.', `${tag}: 1 drop reads "Quota met."`);
+    check(await page.evaluate(() => !/Exemplary/.test(document.querySelector('.stat-lines').textContent)), `${tag}: no "Exemplary" with 1 donor processed`);
+    await shot(page, `${tag}-report-1drop`);
+    await page.evaluate(() => window.__edc.ui.debug.showResults({ result: 'complete', liters: 58.3, stars: 3, levelId: 'shift-1', levelNumber: 1, collected: 52.1, bonus: 6.2, fines: 0, kills: 14, drownings: 0, bestCombo: 4, time: 92, donorsTotal: 15, causes: { impale: 9, cut: 5 } }, { combos: 3, slams: 12 }));
+    await sleep(3200);
+    check(await page.evaluate(() => document.querySelector('.headline').textContent) === 'Operator of the Shift.', `${tag}: 3 drops reads "Operator of the Shift."`);
+    await shot(page, `${tag}-report-3drops`);
+    await page.evaluate(() => window.__edc.ui.debug.toTitle());
+    await sleep(300);
+    await page.evaluate(() => window.__edc.ui.debug.open('settings'));
+    await sleep(700);
+    check(await page.evaluate(() => [...document.querySelectorAll('.setting[data-key="quality"] .seg-o')].map((o) => o.dataset.v).join(',')) === 'low,medium,high,auto', `${tag}: quality order Low, Medium, High, Auto`);
+    await shot(page, `${tag}-settings`);
+    reportErrors(page, tag);
+    await page.context().close();
+  }
+}
+
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 try {
+  if (ONLY === 'fix2') await fix2(browser);
   if (!ONLY || ONLY === 'flow') await flow(browser);
   if (!ONLY || ONLY === 'pad') await pad(browser);
   if (!ONLY || ONLY === 'overtime') await overtime(browser);

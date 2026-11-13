@@ -13,6 +13,9 @@ export const TUNABLES = {
     pgsIterations: 1,           // Rapier numInternalPgsIterations
     maxBodies: 450,             // ARCHITECTURE budget (bodies alive at once)
     debrisCap: 140,             // detached parts allowed before the oldest drained ones dissolve
+    crowdBodies: 300,           // above this many live bodies, drained junk dissolves early (perf):
+    crowdDrainedAfter: 0.5,     //   drained loose parts this long after detaching, and fully drained
+    crowdDissolvePerStep: 6,    //   corpses 2 s after death; at most this many parts per step
     maxSpeed: 40,               // hard clamp on |v| (safety net against solver explosions), m/s
     maxAngSpeed: 40,            // hard clamp on |w|, rad/s
     softCcd: 0.25,              // m soft-CCD prediction on thin limbs (hard CCD stretches ragdolls)
@@ -25,10 +28,17 @@ export const TUNABLES = {
     rotateAccel: 5.0,          // rad/s^2 at full input (GDD §4)
     maxOmega: 2.2,             // rad/s
     rotateKick: 0.12,          // instant |omega| floor on a fresh press (first-frame response)
-    coastDamping: 2.2,         // 1/s exponential decay with no input (coasts ~1 s)
+    // HANDLING (fix round 2, PLAYTEST-1 M4: it used to coast 51° after release, "like ice").
+    // Released = exponential coast + a constant settle deceleration: from full speed it stops in
+    // ~12° / 0.23 s, a 0.25 s tap travels ~16° in total (5° after release); Brake stops in ~3.5°.
+    // Body fling on the harder stop was measured (pinned crowd, 3 seeds): peak relative speed
+    // 14-26 m/s before vs 17-24 after, same damage; no clamp needed. tests/handling.test.mjs.
+    coastDamping: 1.5,         // 1/s exponential decay with no input
+    settleDecel: 8.0,          // rad/s^2 constant deceleration with no input ("the motor holds it")
     holdDamping: 6.0,          // extra decay once slow (< holdBelow) so it settles and holds
     holdBelow: 0.25,
     brakeDamping: 9.0,         // 1/s while brake held
+    brakeDecel: 8.0,           // rad/s^2 extra constant deceleration while brake held
     reverseBoost: 1.25,         // accel multiplier when input opposes current spin (snappier rocking)
     fictitious: { centrifugal: 1.0, euler: 1.0, coriolis: 1.0 }, // scale factors (1 = physical)
     friction: 0.65,
@@ -78,7 +88,19 @@ export const TUNABLES = {
     flailTorque: 7,            // random limb torque impulses (N·m)
     flailInterval: [0.35, 1.2],
     speakInterval: [5, 12],    // s between speech bubbles (per donor, random)
-    drownSeconds: 6.0,         // alive with head submerged this long = drowned (waste)
+    // DROWNING (fix round 2, PLAYTEST-1 M2): live donors float LOW, so in a deep pool their heads
+    // are under most of the time unless the player lifts them out (slam, rotate) or processes them.
+    // donor.drown01 rises 1/drownSeconds per s with the head under, decays drownRecover per s out.
+    aliveBuoyancy: 0.8,        // buoyancy factor of live donors' parts (corpses / loose parts: 1);
+                               // 0.8 x pool.density = ~80 % submerged: at the surface, head awash
+    uprightInPool: 0.0,        // upright-torque factor with the chest fully submerged (limp: can't swim)
+    drownSeconds: 4.5,         // s of continuous head-under to drown (waste)
+    drownRecover: 0.2,         // drown01 per s regained with the head out of the pool (slow: a
+                               // slam buys time, getting them processed saves them)
+    drownHeadSub: 0.6,         // head submersion (0..1) that counts as "under"
+    drownMinDepth: 1.85,       // m (× donor scale = 2.5 m, a standing donor): shallower pools never drown
+    drownWarnAt: 0.35,         // donor:drowning fires when drown01 crosses this going up
+    drownWastes: true,         // a drowned donor's remaining blood is lost (never collected)
   },
 
   damage: {
@@ -108,6 +130,10 @@ export const TUNABLES = {
 
   pool: {
     maxFill: 0.82,             // never fill the drum completely
+    // shift mode: litres collected -> fill (src/sim/pool.js makeFillCurve). Monotone concave;
+    // fill(q1) = atQ1, fill reaches maxFill at fullAt × q3. Level override: level.fillCurve
+    // ({ atQ1, fullAt, fullLiters, k } or false = legacy volume / capacity). Overtime: real volume.
+    curve: { atQ1: 0.38, fullAt: 1.15 },
     density: 1.55,             // buoyancy factor (>1 floats; equilibrium ≈ 1/density submerged)
     linearDrag: 2.6,           // 1/s at full submersion
     angularDrag: 2.0,
@@ -236,6 +262,7 @@ export const TUNABLES = {
     defaultCapacity: 160,      // L that would fill the whole drum cross-section
     spawnInterval: 0.45,       // s between donors leaving the hatch
     waveWarning: 1.0,          // s between wave:incoming and hatch:open
+    clearDelay: 2.5,           // s the drum must be clear before the next wave is brought forward
     timerWarnings: [30, 10, 5, 4, 3, 2, 1],
   },
 };

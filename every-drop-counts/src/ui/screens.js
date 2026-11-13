@@ -13,7 +13,7 @@ import { esc, h, fmtL, fmtClock, pad2, onActivate } from './dom.js';
 import { getSave, updateSave, SETTING_CHOICES } from '../core/save.js';
 import { LICENSES } from './licenses.js';
 import {
-  BRAND, BRAND_SUB, GAME, MENU, SHIFT_SELECT, PAUSE, SETTINGS, RECORDS, CREDITS, BRIEFINGS, QUIT, OVERTIME, TOTAL_SHIFTS,
+  BRAND, BRAND_SUB, GAME, MENU, SHIFT_SELECT, PAUSE, SETTINGS, RECORDS, CREDITS, BRIEFINGS, BRIEFING, QUIT, OVERTIME, TOTAL_SHIFTS,
 } from './copy.js';
 
 const rowHtml = ({ ico, title, sub = '', disabled = false, cls = '', arrow = true, extra = '' }) => `
@@ -154,6 +154,8 @@ export function createScreens(app) {
         <div class="brief-kicker"></div>
         <h2 class="brief-name"></h2>
         <p class="brief-text"></p>
+        <div class="brief-tip" hidden><span class="tip-l">${icon('speaker')}${esc(BRIEFING.lessonLabel)}</span><p class="tip-t"></p></div>
+        <div class="brief-news" hidden><span class="news-l">${esc(BRIEFING.newLabel)}</span><div class="news-list"></div></div>
         <div class="brief-meta"></div>
         <div class="brief-actions">
           <button type="button" class="btn primary" data-focus><span data-glyph="confirm"></span><span class="btn-t"></span></button>
@@ -168,6 +170,13 @@ export function createScreens(app) {
       e.querySelector('.brief-kicker').textContent = info.kicker;
       e.querySelector('.brief-name').textContent = info.name;
       e.querySelector('.brief-text').textContent = info.text;
+      const tip = e.querySelector('.brief-tip');
+      tip.hidden = !info.lesson;
+      tip.querySelector('.tip-t').textContent = info.lesson || '';
+      const news = e.querySelector('.brief-news');
+      const items = Array.isArray(info.news) ? info.news : [];
+      news.hidden = !items.length;
+      news.querySelector('.news-list').innerHTML = items.map((n) => `<span class="news-item"><span class="news-ico">${icon(n.icon || 'warning')}</span><span class="news-t">${esc(n.name)}</span></span>`).join('');
       const meta = e.querySelector('.brief-meta');
       if (info.quota) {
         meta.innerHTML = `<span class="meta-quota">${info.quota.map((q, i) => `<span class="q">${dropsHtml(i + 1, 'tiny')}<b class="num">${Math.round(q)}</b><i>L</i></span>`).join('')}</span>
@@ -258,6 +267,12 @@ export function createScreens(app) {
       }
       settings.focus = list.querySelector('[data-focus]');
       app.refreshGlyphs(settings.el);
+    },
+    /** Re-render one row from the save (e.g. fullscreen changed by F11). */
+    refreshRow(key) {
+      const rowEl = settings.el.querySelector(`.setting[data-key="${key}"]`);
+      const item = SCHEMA.find((x) => x.key === key);
+      if (rowEl && item) renderSetting(rowEl, item);
     },
     onFocus(el) {
       const k = el && el.dataset.key;

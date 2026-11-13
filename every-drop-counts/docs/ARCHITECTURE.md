@@ -26,6 +26,7 @@ every-drop-counts/
   src/
     main.js             boot + wiring (owner: CORE; others make small, atomic edits to register systems)
     core/               event bus, fixed-step loop, input, RNG, save, config/tunables   (CORE)
+                        brand.js: the fictional company name (provisional SUNNYVEIN), one line (UI)
     sim/                PURE game simulation: no DOM, no three, runs in Node           (CORE, then CONTENT)
       drum, ragdoll, damage, blood accounting, pool, hazards/, donors/, props/, levels/, modes/
     render/             three.js views of sim state                                    (CORE baseline)
@@ -210,6 +211,14 @@ draw-call / triangle counts instead (`renderer.info`).
   `__edc.ui.debug` has helpers for screenshots; `?autopause=1` re-enables focus-loss pause in debug.
 - Save schema (`edc.save.v1`, `src/core/save.js`): every field is sanitised on load; unreadable JSON is
   kept under `edc.save.v1.corrupt` and replaced; `MIGRATIONS[n]` upgrades raw saves from version n.
+  A save from a newer build (`version` > `SCHEMA_VERSION`) is kept under `edc.save.v1.future` and loaded
+  sanitised (toast, like a corrupt save). Optional `teach: { rotate, brake, slam }` counts successful uses
+  of each verb; the UI's teaching prompts retire after 3. Settings quality order is Low, Medium, High, Auto.
+- Brand: the fictional company name is `BRAND` in `src/core/brand.js` (provisional SUNNYVEIN). UI copy and
+  the signage atlas import it; never hard-code the name elsewhere.
+- UI listens (optionally) to `donor:drowning { id, x, y, z | pos, pan, wasted }` and `donor:death { cause:
+  'drown', wasted }` for the "−X L wasted" popup; audio plays a rate-limited gurgle on `donor:drowning`.
+  Overtime HUD reads `overtime.demandTier` / `demandRate` (falls back to one tier per 1 L/s of drain).
 
 ## Integration notes (INTEGRATION pass) — additive
 

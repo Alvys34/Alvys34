@@ -109,8 +109,12 @@ Use a **dedicated build account** (Steamworks → Users & Permissions → add a 
 only "Edit App Metadata" + "Publish App Changes To Steam" for this app) and Steam Guard. The first
 login asks for a Steam Guard code; credentials are then cached.
 
-**Upload the Linux depot from Linux/macOS/WSL**, not from a Windows filesystem, so the executable
-bits of `EveryDropCounts` and `EveryDropCounts.sh` are preserved **[verify]**.
+**Build and upload the Linux depot from Linux/macOS/WSL** (WSL: inside the Linux file system, not
+under `/mnt/c`), never from a Windows filesystem: NTFS drops the executable bits of
+`EveryDropCounts` and `EveryDropCounts.sh` (confirmed on the first Windows run, LOCAL-REPORT-1 §3:
+`npm run verify` fails two checks for a Linux build made on Windows). The release zips are made
+with a pure-Node zip (no `zip` binary needed, so `build:release` also runs on Windows) and the Linux
+zip always stores those files as 0755; the depot upload uses the folder, though.
 
 ### 3.2 Build and upload
 
@@ -220,8 +224,11 @@ cartoonish but constant dismemberment and blood, so answer honestly:
 Assets are produced in the repo's `steam/` folder (owned by the release/art side). Check every
 size against Steamworks → Store page admin → Graphical Assets; at the time of writing **[verify]**:
 header capsule 920×430, small capsule 462×174, main capsule 1232×706, vertical capsule 748×896,
-≥ 5 screenshots (1920×1080), library capsule 600×900, library hero 3840×1240, library logo (PNG
-with transparency), trailer recommended. Also: short + long description, tags, supported OS
+≥ 5 screenshots (1920×1080 minimum, ≥ 4 of them marked suitable for all ages), page background
+1438×810, library capsule 600×900, library header 920×430, library hero 3840×1240 (no text),
+library logo (transparent PNG, 1280 wide and/or 720 tall), shortcut icon 256×256, app icon 184×184
+(.jpg), event cover 800×450; trailer up to 1920×1080, 30 or 60 fps, ≥ 5000 kbps, H.264 + AAC
+preferred (sizes checked against the Steamworks pages on 2026-11-13, LOCAL-REPORT-1 §4). Also: short + long description, tags, supported OS
 (Windows, Linux/SteamOS), system requirements, controller support ("Full Controller Support" if
 every screen is gamepad-navigable), languages (English), price, release date / "Coming Soon".
 

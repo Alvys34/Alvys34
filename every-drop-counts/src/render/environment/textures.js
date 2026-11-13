@@ -3,6 +3,7 @@
  * drawn here once at load. Palette: ./palette.js (no reds — blood is the only red in the game).
  */
 import { CSS, makeRng } from './palette.js';
+import { BRAND, BRAND_CENTER, BRAND_MODEL } from '../../core/brand.js';
 
 /** Bundled UI font (@fontsource-variable/nunito, imported by src/ui) first; system fallbacks only until it loads. */
 export const FONT_FAMILY = 'Nunito Variable';
@@ -235,7 +236,7 @@ export function drumBackCanvas(scale = 1) {
   stencil(g, 'PLEASE KEEP ARMS AND LEGS', W - PPM * 0.55, bandY + PPM * 0.68, PPM * 0.17, CSS.mint4, rng, { align: 'right', alpha: 0.7 });
   stencil(g, 'INSIDE THE DRUM AT ALL TIMES', W - PPM * 0.55, bandY + PPM * 0.94, PPM * 0.17, CSS.mint4, rng, { align: 'right', alpha: 0.7 });
   dropLogo(g, W - PPM * 1.3, PPM * 1.15, PPM * 0.5, CSS.mint3, true);
-  stencil(g, 'DRAINWELL', W - PPM * 1.3, PPM * 1.95, PPM * 0.2, CSS.mint4, rng, { alpha: 0.7 });
+  stencil(g, BRAND, W - PPM * 1.3, PPM * 1.95, PPM * 0.2, CSS.mint4, rng, { alpha: 0.7 });
   // corner IDs (asymmetric: helps reading the rotation)
   stencil(g, '1', PPM * 0.35, PPM * 9.55, PPM * 0.3, CSS.ink, rng, { alpha: 0.45 });
   stencil(g, '2', W - PPM * 0.35, PPM * 9.55, PPM * 0.3, CSS.ink, rng, { alpha: 0.45 });
@@ -358,9 +359,8 @@ export function signAtlas() {
   place('main', 1640, 330, (gg, w, h) => {
     panel(gg, w, h, CSS.cream0, CSS.mint4, 40);
     dropLogo(gg, 170, 170, 115, CSS.mint3, true);
-    text(gg, 'DRAINWELL', 330, 128, 150, CSS.mint4, 900, 'left', 1100);
-    text(gg, '™', 1320, 70, 50, CSS.mint4, 700, 'left');
-    text(gg, 'Community Donation Center', 335, 248, 74, CSS.mint3, 700, 'left', 1240);
+    text(gg, BRAND, 330, 128, 150, CSS.mint4, 900, 'left', 1100);
+    text(gg, BRAND_CENTER, 335, 248, 74, CSS.mint3, 700, 'left', 1240);
   });
   place('slogan', 1000, 200, (gg, w, h) => {
     panel(gg, w, h, CSS.mint3, CSS.mint4, 100);
@@ -384,7 +384,7 @@ export function signAtlas() {
     gg.fillStyle = '#dfe5e6'; roundRect(gg, 0, 0, w, h, 14); gg.fill();
     gg.strokeStyle = CSS.steelDark; gg.lineWidth = 5; roundRect(gg, 8, 8, w - 16, h - 16, 10); gg.stroke();
     for (const [x, y] of [[26, 26], [w - 26, 26], [26, h - 26], [w - 26, h - 26]]) { gg.fillStyle = CSS.steelDark; gg.beginPath(); gg.arc(x, y, 8, 0, 7); gg.fill(); }
-    text(gg, 'DRAINWELL  DD-16', w / 2, 52, 44, CSS.ink, 900, 'center', w - 80);
+    text(gg, BRAND_MODEL, w / 2, 52, 44, CSS.ink, 900, 'center', w - 80);
     text(gg, 'ROTARY DONATION DRUM', w / 2, 100, 30, CSS.ink, 700, 'center', w - 80);
     text(gg, 'MAX LOAD 25 DONORS · 2.2 RAD/S', w / 2, 140, 24, CSS.steelDark, 700, 'center', w - 80);
     text(gg, 'DO NOT OPEN WHILE OCCUPIED', w / 2, 178, 24, CSS.steelDark, 700, 'center', w - 80);
@@ -430,7 +430,7 @@ export function signAtlas() {
     gg.lineWidth = 9; gg.rotate(-0.55); gg.beginPath(); gg.moveTo(0, 0); gg.lineTo(0, -60); gg.stroke();
     gg.rotate(2.6); gg.lineWidth = 6; gg.beginPath(); gg.moveTo(0, 0); gg.lineTo(0, -88); gg.stroke();
     gg.restore();
-    text(gg, 'DRAINWELL', w / 2, 170, 18, CSS.mint4, 800);
+    text(gg, BRAND, w / 2, 170, 18, CSS.mint4, 800);
   });
   place('calm', 520, 120, (gg, w, h) => {
     panel(gg, w, h, '#ffffff', CSS.mint3, 18);

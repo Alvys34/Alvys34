@@ -86,7 +86,7 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
     plan, sizeScale: S,
     mustSurvive: !!def.mustSurvive,
     speech: null, speakTimer: rng.range(1.0, P.speakInterval[1]), flailTimer: rng.range(...P.flailInterval),
-    drownTimer: 0, impaled: 0, gone: false, hurtAcc: 0, hurtTimer: 0, lastCause: null, lastCauseTime: -99,
+    drown01: 0, drownTimer: 0, drowningWarned: false, impaled: 0, gone: false, hurtAcc: 0, hurtTimer: 0, lastCause: null, lastCauseTime: -99,
   };
   // orientation: upright in world => rotate by -theta about z, plus a little yaw for variety
   const yaw = opts.yaw ?? rng.range(-0.5, 0.5);
@@ -127,6 +127,8 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
       wound: 0, opened: false, encased: false, stumps: [], joint: null, severed: false, broken: false, zeroed: false,
       impaled: null, spurting: false, slamScale: def.slamScale, born: ctx.time, detachedAt: -1,
     });
+    // sedated donors float LOW (heads under in a deep pool); corpses / severed parts float high
+    part.buoyancy = P.aliveBuoyancy ?? 1;
     ctx.owners.set(collider.handle, { kind: 'part', part });
     donor.parts[pd.name] = part;
     donor.partList.push(part);
@@ -198,7 +200,9 @@ export function donorPreStep(ctx, donor, dt) {
     // inside a safety sphere: bodies are disabled and posed by the sphere prop; only talk
     donor.flailTimer = 1;
   } else if (hpFrac > P.uprightMinHp && !chest.severed && !chest.removed) {
-    const k = P.uprightTorque * (beh.upright ?? 1) * S3;
+    // sedated donors cannot swim: in the pool they go limp and float face-down-ish (head under)
+    const wet = Math.min(1, Math.max(chest.sub || 0, pelvis.removed ? 0 : pelvis.sub || 0));
+    const k = P.uprightTorque * (beh.upright ?? 1) * S3 * (1 - wet * (1 - (P.uprightInPool ?? 1)));
     for (const part of [chest, pelvis]) {
       if (part.removed || part.impaled) continue;
       // part up axis in drum-local coords
@@ -242,13 +246,22 @@ export function donorPostStep(ctx, donor, dt) {
   const P = ctx.T.donor;
   if (donor.def.postStep) donor.def.postStep(ctx, donor, dt);
   if (donor.alive) {
+    // DROWNING (fix round 2): progress drown01 0..1 rises while the head is under (full in
+    // drownSeconds), decays at drownRecover/s while it is out. donor:drowning fires each time the
+    // progress crosses drownWarnAt going up. At 1 the donor drowns: the corpse's blood is wasted.
     const head = donor.parts.head;
-    if (!head.removed && !head.encased && head.sub > 0.6) {
-      donor.drownTimer += dt;
-      if (donor.drownTimer >= P.drownSeconds) killDonor(ctx, donor, 'drown');
-    } else {
-      donor.drownTimer = Math.max(0, donor.drownTimer - dt * 2);
-    }
+    const deep = !(ctx.pool && ctx.pool.depth < (P.drownMinDepth ?? 0) * (donor.sizeScale || 1));
+    const under = deep && !head.removed && !head.encased && head.sub > (P.drownHeadSub ?? 0.6);
+    if (under) donor.drown01 = Math.min(1, donor.drown01 + dt / P.drownSeconds);
+    else donor.drown01 = Math.max(0, donor.drown01 - dt * (P.drownRecover ?? 0.33));
+    donor.drownTimer = donor.drown01 * P.drownSeconds; // seconds-equivalent (compat)
+    const warnAt = P.drownWarnAt ?? 0.35;
+    if (donor.drown01 >= warnAt && !donor.drowningWarned) {
+      donor.drowningWarned = true;
+      const at = head.removed ? donor.parts.chest : head;
+      ctx.emit('donor:drowning', { id: donor.id, x: round3(at.x), y: round3(at.y), z: round3(at.z) }, [at.x, at.y, at.z]);
+    } else if (donor.drown01 < warnAt * 0.6) donor.drowningWarned = false; // hysteresis
+    if (donor.drown01 >= 1) killDonor(ctx, donor, 'drown');
     if (donor.alive && donor.blood < donor.bloodMax * P.deathBloodFraction) {
       const recent = ctx.time - donor.lastCauseTime < 3 ? donor.lastCause : null;
       killDonor(ctx, donor, recent || 'bleedout');
@@ -256,6 +269,8 @@ export function donorPostStep(ctx, donor, dt) {
   }
   if (donor.speech && ctx.time - donor.speech.t > 2.5) donor.speech = null;
   donor.hurtTimer -= dt;
+  // donor:hurt is for the living (ow sounds, flinch): damage to corpses is not reported
+  if (!donor.alive && donor.deathTime < ctx.time) donor.hurtAcc = 0;
   if (donor.hurtAcc >= 6 || (donor.hurtAcc > 0 && donor.hurtTimer <= 0)) {
     const c = donor.parts.chest;
     ctx.emit('donor:hurt', { id: donor.id, amount: Math.round(donor.hurtAcc), cause: donor.lastCause, alive: donor.alive }, [c.x, c.y, c.z]);
@@ -305,6 +320,10 @@ export function severPart(ctx, part) {
   child.wound = Math.max(child.wound, D.severStumpRate);
   parent.wound = Math.max(parent.wound, D.severStumpRate);
   child.opened = true; parent.opened = true;
+  // a severed limb (and whatever still hangs off it) floats like any other loose part
+  const loose = new Set([child]);
+  for (const j of donor.joints) if (!j.severed && !j.removed && loose.has(j.parent)) loose.add(j.child);
+  for (const p of loose) p.buoyancy = 1;
   // burst from the cut
   const wp = jointWorldPos(child, joint.a2);
   releaseBlood(ctx, child, child.blood * D.severBurst, { burst: true, pos: wp });
@@ -339,14 +358,28 @@ export function killDonor(ctx, donor, cause = 'bleedout') {
   donor.speech = null;
   setMotors(ctx, donor, false);
   const D = ctx.T.damage;
+  let wasted = 0;
+  for (const p of donor.partList) if (!p.removed) p.buoyancy = 1; // corpses float at the surface
   if (cause !== 'drown') {
     for (const p of donor.partList) {
       if (p.removed) continue;
       if (p.wound > 0 && p.opened) releaseBlood(ctx, p, p.blood * D.deathBurst);
     }
+  } else if (ctx.T.donor.drownWastes !== false) {
+    // drowned = waste: the blood still in the body is lost (pool water), it can never be collected
+    for (const p of donor.partList) {
+      if (p.removed || !(p.blood > 0)) continue;
+      wasted += p.blood;
+      donor.blood -= p.blood;
+      p.blood = 0; p.wound = 0;
+    }
+    ctx.blood.dissolved += wasted;
+    ctx.blood.wasted = (ctx.blood.wasted || 0) + wasted;
   }
   const c = donor.parts.chest;
-  ctx.emit('donor:death', { id: donor.id, type: donor.type, cause }, [c.x, c.y, c.z]);
+  const payload = { id: donor.id, type: donor.type, cause };
+  if (cause === 'drown') payload.wasted = Math.round(wasted * 100) / 100;
+  ctx.emit('donor:death', payload, [c.x, c.y, c.z]);
   ctx.stepKills = (ctx.stepKills || 0) + 1;
   if (donor.def.onDeath) donor.def.onDeath(ctx, donor, cause);
   if (ctx.scoring) ctx.scoring.onDeath(ctx, donor, cause);
@@ -380,6 +413,8 @@ export function removePart(ctx, part, { release = false } = {}) {
   if (donor.alive && (part.role === 'head' || part.role === 'chest')) killDonor(ctx, donor, ctx.lastRemoveCause || 'grind');
   if (donor.partList.every((p) => p.removed)) donor.gone = true;
 }
+
+function round3(v) { return Math.round(v * 1000) / 1000; }
 
 export function jointWorldPos(part, a) {
   const r = rotVec({ x: part.qx, y: part.qy, z: part.qz, w: part.qw }, a);

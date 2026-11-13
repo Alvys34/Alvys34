@@ -12,7 +12,9 @@ import { ACHIEVEMENTS, createAchievementTracker } from '../src/core/achievements
 
 const base = (id, hazards, extra = {}) => ({
   id, number: 90, name: id, duration: 999, capacity: 150, quota: [1, 2, 3],
-  hatch: { wall: 'back', x: 0, y: 0, offset: 1.2 }, hazards, waves: [], pa: [], ...extra,
+  // fillCurve: false = legacy linear pool (litres / capacity): with the toy quotas [1,2,3] the quota
+  // fill curve would flood the drum after 3.5 L and these tests are about the hazards, not the pool
+  hatch: { wall: 'back', x: 0, y: 0, offset: 1.2 }, hazards, waves: [], pa: [], fillCurve: false, ...extra,
 });
 
 /** step n seconds regardless of the shift status */
@@ -138,7 +140,8 @@ test('inspector: 3 hits shatter the sphere, he becomes an ordinary ragdoll, his 
 });
 
 test('inspector: alive at shift end = +20 L compliance bonus, counted in the result', async () => {
-  const lvl = base('t-insp2', [], { duration: 4, waves: [{ at: 0.2, count: 2, types: { inspector: 1, standard: 1 } }] });
+  // q1 = 0: the donors alone "met" the 1-drop quota, so the bonus is paid (see the withheld test)
+  const lvl = base('t-insp2', [], { duration: 4, quota: [0, 2, 3], waves: [{ at: 0.2, count: 2, types: { inspector: 1, standard: 1 } }] });
   const { sim, events } = await makeSim({ seed: 6, level: lvl });
   stepFor(sim, 5);
   const end = events.find((e) => e.type === 'shift:end');
@@ -148,6 +151,50 @@ test('inspector: alive at shift end = +20 L compliance bonus, counted in the res
   assert.equal(end.payload.inspectorsSaved, 1);
   assert.equal(end.payload.result, 'complete');
   assert.ok(end.payload.report && end.payload.report.lines.length > 3, 'results flavour text');
+  sim.dispose();
+});
+
+test('inspector: compliance bonus is WITHHELD when donations alone miss q1 (fines still apply)', async () => {
+  // PLAYTEST-1 B2: idle play must not score from survival bonuses
+  const lvl = base('t-insp-wh', [], { duration: 4, quota: [10, 20, 30], waves: [{ at: 0.2, count: 3, types: { inspector: 2, standard: 1 } }] });
+  const { sim, events } = await makeSim({ seed: 6, level: lvl });
+  stepFor(sim, 1.5);
+  const ctx = sim.ctx;
+  const [a] = ctx.donors.filter((d) => d.mustSurvive);
+  const { killDonor } = await import('../src/sim/donor.js');
+  killDonor(ctx, a, 'cut'); // one incident: fined regardless
+  stepFor(sim, 4);
+  const end = events.find((e) => e.type === 'shift:end').payload;
+  assert.ok(!events.some((e) => e.type === 'bonus' && e.payload.reason === 'compliance'), 'no compliance bonus paid');
+  const wh = events.find((e) => e.type === 'bonus:withheld');
+  assert.ok(wh && wh.payload.liters === 20 && wh.payload.count === 1, 'bonus:withheld event');
+  assert.equal(end.complianceWithheld, 20);
+  assert.equal(end.complianceWithheldCount, 1);
+  assert.equal(end.fines, 25, 'fines always apply');
+  assert.equal(end.inspectorsSaved, 1);
+  assert.equal(end.stars, 0);
+  assert.ok(end.report.lines.some((l) => /withheld/i.test(l)), 'report line for the withheld case');
+  sim.dispose();
+});
+
+test('inspector: a visit bonus earned before q1 is held, then paid once the donors reach q1', async () => {
+  const lvl = base('t-insp-hold', [], { duration: 6, quota: [3, 20, 30], inspectorVisit: 1.0, waves: [{ at: 0.2, count: 2, types: { inspector: 1, standard: 1 } }] });
+  const { sim, events } = await makeSim({ seed: 6, level: lvl });
+  stepFor(sim, 2.5); // the visit is over: he left, bonus held (nothing collected yet)
+  const ins = sim.ctx.donors.find((d) => d.mustSurvive);
+  assert.equal(ins.left, true);
+  assert.ok(events.some((e) => e.type === 'inspector:exit' && e.payload.bonusPending === true));
+  assert.ok(!events.some((e) => e.type === 'bonus' && e.payload.reason === 'compliance'));
+  assert.equal(sim.snapshot().inspectors.length, 0, 'an Inspector who left is not listed (not an incident)');
+  assert.equal(sim.snapshot().inspectorsLeft, 1);
+  const { releaseBlood } = await import('../src/sim/blood.js');
+  const donor = sim.ctx.donors.find((d) => !d.mustSurvive);
+  for (const p of donor.partList) if (sim.ctx.blood.collected < 3.2) releaseBlood(sim.ctx, p, p.blood);
+  assert.ok(sim.ctx.blood.collected >= 3, `collected ${sim.ctx.blood.collected}`);
+  stepFor(sim, 5);
+  const end = events.find((e) => e.type === 'shift:end').payload;
+  assert.ok(events.some((e) => e.type === 'bonus' && e.payload.reason === 'compliance' && e.payload.inspector === 1), 'held bonus paid at the end');
+  assert.equal(end.complianceWithheld, 0);
   sim.dispose();
 });
 

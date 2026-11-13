@@ -206,7 +206,7 @@ export function createFacility(ctx, M, signs) {
     tube.position.set(x, FY + 24.85, WZ + 0.45);
     group.add(tube);
   }
-  tubeMats.forEach((mat, i) => tubes.push({ mat, phase: i * 0.37, failAt: [0.45, 0.3, 0.62][i], base: 1.7 }));
+  tubeMats.forEach((mat, i) => tubes.push({ mat, phase: i * 0.37, failAt: [0.4, 0.32, 0.55][i], base: 1.7 }));
 
   // ---------------- soft props ----------------
   const rng = makeRng(42);

@@ -11,7 +11,9 @@
  *   id, number, name, subtitle,
  *   mode: 'shift',                 // optional; 'shift' default
  *   duration: s,                   // shift clock
- *   capacity: L,                   // litres that would fill the whole cross-section (pool speed)
+ *   capacity: L,                   // litres that would fill the whole cross-section (Overtime and
+ *                                  //   fillCurve: false only; shift mode uses the quota fill curve)
+ *   fillCurve: { atQ1, fullAt } | false,  // optional: pool fill vs litres (src/sim/pool.js)
  *   quota: [20, 42, 54],           // litres for 1 / 2 / 3 drops
  *   startAngle: rad,               // initial drum angle
  *   hatch: { wall, at, offset? },  // intake hatch on a drum wall (tangent coord `at`), or
@@ -20,6 +22,10 @@
  *   props: [ { type, at: s, pos: [x,y,z] } ],   // optional timed props
  *   waves: [ { at: s, count, types?: {standard: n, ...}, props?: [{type, count}] } ],
  *   advanceWhenClear: true,        // bring the next wave forward when nobody is alive
+ *   waveGap: s,                    // optional: a regular wave opens at most this long after the
+ *                                  //   previous one (per-wave `gap` overrides); `at` then only
+ *                                  //   places the first wave. Waves with `fixed: true` (Inspector
+ *                                  //   visits) keep their own `at` (see src/sim/modes/shift.js)
  *   pa: [ { at: s | on: 'event', text, mood } ],  // PA lines (on = bus event type, fires once)
  *   tunables: { ... }              // optional per-level overrides merged into TUNABLES
  * }
@@ -32,6 +38,7 @@ export default {
   lesson: 'Rotate the drum. Donations from height are more generous.',
   duration: 105,
   capacity: 150,
+  fillCurve: false, // tutorial: legacy linear pool (litres / capacity), the floor bed stays dry
   quota: [6, 35, 48],
   startAngle: 0,
   hatch: { wall: 'back', x: -4.6, y: 0.5, offset: 1.2 },

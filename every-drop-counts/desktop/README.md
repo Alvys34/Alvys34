@@ -68,6 +68,14 @@ What the build does (`scripts/build.mjs`):
    pure-JS `resedit` (inside packager) — **no wine/rcedit**.
 5. Prunes Chromium locales to `en-US` (about −7 MB), flips Electron fuses (no `ELECTRON_RUN_AS_NODE`,
    no `NODE_OPTIONS`, no `--inspect`, app only from asar), writes the Linux launcher, zips.
+6. Zips each folder with a pure-Node zip (`yazl`, no `zip` binary: works on Windows). Unix modes
+   and symlinks are stored; in the Linux zip the binary, the `.sh` launcher, `chrome-sandbox` and
+   `chrome_crashpad_handler` are always stored executable (0755). `--no-zip` skips this step.
+
+**Build the Linux depot on Linux or WSL (inside the Linux file system, e.g. `~/`), never on an NTFS
+drive.** NTFS cannot store exec bits: a Linux folder built on Windows has a non-executable binary
+and launcher, and `npm run verify` fails two checks for it. The Linux *zip* is fixed up either way,
+but Steam uploads the *folder*. The Windows build can be made on either OS.
 
 Company name in the exe metadata: `EDC_COMPANY_NAME="Your Studio" npm run build:all`
 (defaults to "Every Drop Counts").

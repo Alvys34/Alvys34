@@ -102,7 +102,7 @@ export function createBlood(ctx) {
     gx: 0, gy: 0, w2: 0, al: 0, cph: 1, sph: 0, HW, HH, HD, ux: 0, uy: 1, c: 1, s: 0,
     level: -1e9, wave: null, waveR: 1, waveInvDx: 1, waveN: 2, waveOn: false,
   };
-  const runEnv = { g: 13, ux: 0, uy: 1, w2: 0, t: 0 };
+  const runEnv = { g: 13, ux: 0, uy: 1, w2: 0, t: 0, level: -1e9 };
 
   function planeOf(surf, x, y, z, out) {
     switch (surf) {
@@ -150,7 +150,7 @@ export function createBlood(ctx) {
           atlas.stamp(surf, a + dA * dist, b + dB * dist, dA, dB, r2 * (fwd ? 1.6 : 1), r2, 1.2, 4, 1, rnd());
         }
       }
-      if (size > 0.045 && rnd() < Math.min(0.55, size * 5)) runners.spawn(surf, a, b, size * 7 * (0.5 + rnd()));
+      if (size > 0.055 && rnd() < Math.min(0.3, size * 3)) runners.spawn(surf, a, b, size * 8 * (0.6 + rnd()));
       if (speed > 7 && size > 0.06 && rnd() < 0.5) {
         // crown splash: a couple of fine droplets bounce back off the wall
         for (let k = 0; k < 2; k++) {
@@ -351,9 +351,9 @@ export function createBlood(ctx) {
             pcNX[i] * 0.3, pcNY[i] * 0.3, 0, 0.035 + rnd() * 0.05, 6, KIND_DROP);
           w -= 0.012;
         }
-      } else if (nUp < 0.5 && rnd() < dt * w * 1.2) {
-        runners.spawn(pcS[i], pcA[i] + (rnd() - 0.5), 0.2 + rnd() * (2 * HD - 0.4), 0.3 + rnd() * 0.5);
-        w -= 0.05;
+      } else if (nUp < 0.5 && rnd() < dt * w * 0.5) {
+        runners.spawn(pcS[i], pcA[i] + (rnd() - 0.5), 0.2 + rnd() * (2 * HD - 0.4), 0.4 + rnd() * 0.5);
+        w -= 0.08;
       }
       wetP[i] = Math.max(0, w * Math.exp(-dt / 30));
     }
@@ -381,8 +381,9 @@ export function createBlood(ctx) {
         }
         let w = wetG[k];
         if (w <= 0.03) continue;
-        if (rnd() < dt * w * 0.7) { runners.spawn(SURF.BACK, gx + rnd(), gy + rnd(), 0.25 + rnd() * 0.6); w -= 0.08; }
-        if (rnd() < dt * w * 0.35) { runners.spawn(SURF.GLASS, gx + rnd(), gy + rnd(), 0.2 + rnd() * 0.4); w -= 0.08; }
+        // receding pool: a few fat drips per wet cell (not a curtain of thin streaks)
+        if (rnd() < dt * w * 0.22) { runners.spawn(SURF.BACK, gx + rnd(), gy + rnd(), 0.4 + rnd() * 0.6); w -= 0.15; }
+        if (rnd() < dt * w * 0.08) { runners.spawn(SURF.GLASS, gx + rnd(), gy + rnd(), 0.3 + rnd() * 0.4); w -= 0.15; }
         wetG[k] = Math.max(0, w * Math.exp(-dt / 10));
       }
     }
@@ -425,7 +426,7 @@ export function createBlood(ctx) {
   function applyLimits() {
     drops.setLimit((q.droplets || 1500) * loadScale);
     mist.setLimit((q.mist || 600) * loadScale);
-    runners.setLimit((q.runners || 120) * loadScale);
+    runners.setLimit((q.runners || 120) * 0.4 * loadScale); // few, fat drips (readability)
     atlas.setStampCap((q.stamps || 1000) * Math.max(0.5, loadScale));
     emitScale = (q.emitScale || 1) * (0.4 + 0.6 * loadScale);
   }
@@ -463,7 +464,7 @@ export function createBlood(ctx) {
         emitBleeders(state, dt);
         smears(state, dt);
         wetness(state, dt, env.level, ux, uy);
-        runEnv.g = g; runEnv.ux = ux; runEnv.uy = uy; runEnv.w2 = env.w2; runEnv.t = time;
+        runEnv.g = g; runEnv.ux = ux; runEnv.uy = uy; runEnv.w2 = env.w2; runEnv.t = time; runEnv.level = env.level;
         runners.update(dt, runEnv, onDrip);
         // integrate particles at <= 1/60 s sub-steps
         const nSub = Math.min(15, Math.ceil(dt / (1 / 60) - 1e-6));
@@ -492,7 +493,8 @@ export function createBlood(ctx) {
     stats() {
       return {
         drops: drops.count, mist: mist.count, dropLimit: drops.limit, mistLimit: mist.limit, runners: runners.count,
-        stampsDropped: atlas.dropped, glassLoad: +atlas.glassLoad.toFixed(3), bloodMap: atlas.resolution, emitScale: +emitScale.toFixed(2),
+        stampsDropped: atlas.dropped, glassLoad: +atlas.glassLoad.toFixed(3), backLoad: +atlas.backLoad.toFixed(3), backCap: +atlas.backCap.toFixed(3),
+        bloodMap: atlas.resolution, emitScale: +emitScale.toFixed(2),
       };
     },
     atlas,

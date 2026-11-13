@@ -1,11 +1,12 @@
 /**
- * Every player-facing string the UI owns (the written voice of DRAINWELL™).
+ * Every player-facing string the UI owns (the written voice of the brand, see src/core/brand.js).
  * Tone: short, deadpan, corporate, slightly too cheerful. Sentence case. No exclamation marks
  * except where a donor or the brand would genuinely use one.
  * Level names / PA lines / donor lines come from src/sim (CONTENT); these are fallbacks + UI text.
  */
-export const BRAND = 'DRAINWELL™';
-export const BRAND_SUB = 'Community Donation Centers';
+import { BRAND, BRAND_SUB, BRAND_TAGLINE } from '../core/brand.js';
+
+export { BRAND, BRAND_SUB, BRAND_TAGLINE };
 export const GAME = 'Every Drop Counts';
 
 /** Briefing card per shift number: one sentence + the new element's icon. level.briefing wins. */
@@ -16,10 +17,36 @@ export const BRIEFINGS = {
   4: { icon: 'grinder', text: 'The grinder wastes nothing. Slam it when it clogs.' },
   5: { icon: 'hardhat', text: 'An Inspector is visiting. He must leave in one piece.' },
   6: { icon: 'tank', text: 'Oxygen tanks rupture on contact. Plan accordingly.' },
-  7: { icon: 'crusher', text: 'Rail saws, crushers and Thin-Bloods. It is rush hour.' },
+  7: { icon: 'crusher', text: 'It is rush hour. Everything arrives at once.' },
   8: { icon: 'badge', text: 'Staff Appreciation Day. Today, staff donate too.' },
   overtime: { icon: 'pump', text: 'The demand pump never stops. Keep the tank from running dry.' },
 };
+/** Briefing extras: level.lesson is shown under this label; "new this shift" callouts below it. */
+export const BRIEFING = {
+  lessonLabel: 'Tip from Management',
+  newLabel: 'New this shift',
+};
+/**
+ * Callout per novelty key (hazard type, donor type, prop type, or a verb from BRIEFING_VERBS).
+ * The briefing shows the keys a shift introduces that no earlier shift had.
+ */
+export const NOVELTY = {
+  rotate: { icon: 'rotateBoth', name: 'Rotate' },
+  spikes: { icon: 'spikes', name: 'Spike bed' },
+  slam: { icon: 'piston', name: 'SLAM' },
+  saw: { icon: 'saw', name: 'Saws' },
+  tide: { icon: 'tide', name: 'Rising tide' },
+  grinder: { icon: 'grinder', name: 'The Good Machine' },
+  inspector: { icon: 'hardhat', name: 'Inspector' },
+  oxygenTank: { icon: 'tank', name: 'Oxygen tanks' },
+  bigGiver: { icon: 'donor', name: 'Big Givers' },
+  railSaw: { icon: 'saw', name: 'Rail saw' },
+  crusher: { icon: 'crusher', name: 'Crusher' },
+  thinBlood: { icon: 'drop', name: 'Thin-Bloods' },
+  staff: { icon: 'badge', name: 'Staff donors' },
+};
+/** Mechanics a shift teaches that are not in its hazard/donor/prop data. */
+export const BRIEFING_VERBS = { 1: ['rotate'], 2: ['slam'], 3: ['tide'] };
 export const SHIFT_NAMES_FALLBACK = {
   1: 'Orientation', 2: 'Sharp Objects', 3: 'High Tide', 4: 'The Good Machine',
   5: 'Compliance', 6: 'Breathe Easy', 7: 'Rush Hour', 8: 'Staff Appreciation Day',
@@ -71,13 +98,24 @@ export const PAUSE = {
   quitNo: 'Keep working',
 };
 
+/**
+ * Shift report headline, keyed by drops earned. The UI owns these words (the sim's report.title is
+ * ignored for shifts) so the rating always reads the same as the drops on screen.
+ */
 export const RESULT_HEADLINES = {
-  3: 'Exceeds expectations.',
+  3: 'Operator of the Shift.',
   2: 'Meets expectations.',
   1: 'Quota met.',
+  0: 'Quota not met.',
   timeout: 'Quota not met. The clock ran out.',
   failed: 'Quota not met. We ran out of donors.',
 };
+/** headline for a shift:end payload */
+export function resultHeadline(r) {
+  const stars = Math.max(0, Math.min(3, Math.round(Number(r && r.stars) || 0)));
+  if (stars > 0) return RESULT_HEADLINES[stars];
+  return RESULT_HEADLINES[r && r.result] || (r && r.result === 'complete' ? RESULT_HEADLINES[0] : RESULT_HEADLINES.timeout);
+}
 
 export const RESULTS = {
   heading: 'Shift report',
@@ -87,6 +125,8 @@ export const RESULTS = {
   fines: 'Fines',
   newBest: 'New personal best',
   firstReport: 'First report filed',
+  withheldK: 'Compliance bonus',
+  withheldV: 'Withheld: quota not met',
   unlocked: (n, name) => `Shift ${n} unlocked: ${name}`,
   overtimeUnlocked: 'Overtime unlocked',
   skip: 'Skip',
@@ -101,7 +141,7 @@ export const STAT_LINES = [
   (r, x) => (x.combos > 0
     ? { k: 'Sponsor Matches', v: `${x.combos} (best ×${r.bestCombo || 2})`, w: 3 }
     : { k: 'Sponsor Matches', v: '0. Sponsors have been notified.', w: 2 }),
-  (r) => (r.drownings > 0 ? { k: 'Drownings', v: `${r.drownings} (product wasted)`, w: 4 } : { k: 'Drownings', v: '0. Exemplary.', w: 1 }),
+  (r) => (r.drownings > 0 ? { k: 'Drownings', v: `${r.drownings} (product wasted)`, w: 4 } : (r.kills ?? 0) >= 3 ? { k: 'Drownings', v: '0. Exemplary.', w: 1 } : null),
   (r, x) => (x.severs > 0 ? { k: 'Limbs misplaced', v: String(x.severs), w: 3 } : null),
   (r, x) => (x.inspectorFines > 0 ? { k: 'Workplace incidents', v: `${x.inspectorFines} (under review)`, w: 5 } : null),
   (r, x) => (x.inspectorBonus > 0 ? { k: 'Inspections passed', v: String(x.inspectorBonus), w: 4 } : null),
@@ -147,7 +187,12 @@ export const HUD = {
   wave: (n) => `Wave ${n}`,
   overtime: 'Overtime',
   demand: 'Demand',
+  demandTier: (n) => `Tier ${n}`,
+  demandRate: (r) => `−${r} L/s`,
+  demandNext: 'next tier',
   pumpIdle: 'Demand pump warming up',
+  wasted: (l) => `−${l} L wasted`,
+  wastedPlain: 'Product wasted',
   inspector: { safe: 'Inspector: observing', risk: 'Inspector: at risk', incident: 'Inspector: incident' },
 };
 
@@ -165,6 +210,13 @@ export const PROMPTS = {
   rotate: 'Rotate the drum',
   slam: 'Slam',
   brake: 'Hold to brake',
+  slamNow: 'Slam them into it',
+};
+
+/** Save load notices (toasts at boot). */
+export const SAVE_NOTES = {
+  corrupt: { title: 'Save file unreadable', name: 'A fresh record was started.' },
+  future: { title: 'Save from a newer version', name: 'A backup was kept. Unknown records were set aside.' },
 };
 
 export const SETTINGS = {

@@ -84,26 +84,48 @@ export const INSPECTOR = {
     donor.alive = false; donor.left = true; donor.speech = null;
     donor.sphere.leave(ctx);
     for (const p of donor.partList) if (!p.removed) removePart(ctx, p, { release: false });
-    ctx.scoring.addBonus(IN.bonus, 'compliance');
+    const held = ctx.scoring.compliance.held.length;
+    ctx.scoring.earnCompliance(ctx, IN.bonus, { donorId: donor.id, inspector: donor.inspectorNo });
+    const pending = ctx.scoring.compliance.held.length > held;
     ctx.scoring.inspectorsSaved = (ctx.scoring.inspectorsSaved || 0) + 1;
-    ctx.emit('inspector:exit', { id: donor.id }, pos);
-    ctx.emit('pa:announce', { text: 'The Inspector has concluded his visit. Compliance noted.', mood: 'calm' });
+    ctx.emit('inspector:exit', { id: donor.id, inspector: donor.inspectorNo, bonusPending: pending }, pos);
+    ctx.emit('pa:announce', { text: `${inspectorName(ctx, donor)} has concluded his visit. ${pending ? 'Compliance bonus pending your quota.' : 'Compliance noted.'}`, mood: 'calm' });
   },
   onSpawn(ctx, donor) {
+    // numbered per shift so messages can say WHICH Inspector (shift 8 has two visits)
+    ctx.inspectorCount = (ctx.inspectorCount || 0) + 1;
+    donor.inspectorNo = ctx.inspectorCount;
     if (ctx.level && ctx.level.inspectorVisit) donor.visitLeft = ctx.level.inspectorVisit;
     const pel = donor.parts.pelvis;
     const sphere = createProp(ctx, { type: 'safetySphere', donor, pos: [pel.x, pel.y, pel.z], vel: [pel.body.linvel().x, pel.body.linvel().y, 0] }, ctx.nextPropId++);
     ctx.props.push(sphere);
   },
   onDeath(ctx, donor, cause) {
-    ctx.scoring.addFine(IN.fine, 'workplace-incident');
+    ctx.scoring.addFine(IN.fine, 'workplace-incident', { donorId: donor.id, inspector: donor.inspectorNo });
     ctx.scoring.inspectorDeaths = (ctx.scoring.inspectorDeaths || 0) + 1;
-    ctx.emit('pa:announce', { text: cause === 'drown' ? 'An Inspector has drowned. A fine has been deducted. Swimming was not in his remit.' : 'Workplace incident logged. A fine has been deducted from your tank.', mood: 'urgent' });
+    const who = multipleInspectors(ctx) ? ` (${inspectorName(ctx, donor)})` : '';
+    ctx.emit('pa:announce', { text: cause === 'drown' ? `${multipleInspectors(ctx) ? inspectorName(ctx, donor) : 'An Inspector'} has drowned. A fine has been deducted. Swimming was not in his remit.` : `Workplace incident logged${who}. A fine has been deducted from your tank.`, mood: 'urgent' });
   },
   onShiftEnd(ctx, donor) {
     if (donor.alive) {
-      ctx.scoring.addBonus(IN.bonus, 'compliance');
+      // paid only if the donors alone met the 1-drop quota (scoring.earnCompliance)
+      ctx.scoring.earnCompliance(ctx, IN.bonus, { donorId: donor.id, inspector: donor.inspectorNo });
       ctx.scoring.inspectorsSaved = (ctx.scoring.inspectorsSaved || 0) + 1;
     }
   },
 };
+
+/** does this shift have (or has it had) more than one Inspector? then messages name which one */
+function multipleInspectors(ctx) {
+  if ((ctx.inspectorCount || 0) > 1) return true;
+  const waves = (ctx.level && ctx.level.waves) || [];
+  let n = 0;
+  for (const w of waves) {
+    if (Array.isArray(w.types)) n += w.types.filter((t) => t === 'inspector').length;
+    else if (w.types) n += w.types.inspector || 0;
+  }
+  return n > 1 || ctx.levelId === 'overtime';
+}
+function inspectorName(ctx, donor) {
+  return multipleInspectors(ctx) && donor.inspectorNo ? `Inspector #${donor.inspectorNo}` : 'The Inspector';
+}

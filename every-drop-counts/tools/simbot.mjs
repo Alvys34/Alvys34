@@ -20,19 +20,24 @@ import { POLICIES } from './policies.mjs';
 
 export { POLICIES };
 
-export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds = 400, overtime = false, onStep = null, tune = null } = {}) {
+export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds = 400, overtime = false, onStep = null, tune = null, trace = false } = {}) {
   await RAPIER.init();
   const bus = createBus();
   const counters = { sever: 0, impact: 0, events: 0, errors: 0 };
   bus.on('limb:sever', () => counters.sever++);
   bus.on('*', () => counters.events++);
+  let spawned = 0; let drowningEvents = 0; let wasted = 0;
+  bus.on('donor:spawn', (p) => { if (p.type !== 'inspector') spawned++; });
+  bus.on('donor:drowning', () => drowningEvents++);
+  bus.on('donor:death', (p) => { if (p.cause === 'drown') wasted += p.wasted || 0; });
   const sim = createSim({ RAPIER, bus, seed, tunables: tune ? makeTunables(tune) : null });
   if (overtime) sim.startOvertime(); else sim.loadLevel(level);
   const pol = POLICIES[policy];
   if (!pol) throw new Error(`unknown policy ${policy}`);
   const mem = {};
   let peakBodies = 0; let sum = 0; let max = 0; let n = 0; let maxSpeed = 0;
-  let idleRun = 0; let maxIdle = 0; let fillHalf = null; let peakFill = 0;
+  let idleRun = 0; let maxIdle = 0; let fillHalf = null; let peakFill = 0; let capT = null;
+  const fillTrace = [];
   const steps = Math.round(maxSeconds * 60);
   const escapes = [];
   for (let i = 0; i < steps; i++) {
@@ -63,6 +68,8 @@ export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds 
       const dur = c.mode.clock.duration;
       if (fillHalf == null && Number.isFinite(dur) && c.mode.clock.t >= dur / 2) fillHalf = c.pool.fill;
       if (c.pool.fill > peakFill) peakFill = c.pool.fill;
+      if (capT == null && c.pool.fill >= c.T.pool.maxFill - 1e-3) capT = c.mode.clock.t;
+      if ((c.stepIndex % 60) === 0) fillTrace.push(+c.pool.fill.toFixed(3));
     }
     if (onStep) onStep(sim, i);
     if (st.status === 'ended' && st.time - (mem.endT ??= st.time) > 0.5) break;
@@ -78,6 +85,13 @@ export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds 
     maxSpeed: +maxSpeed.toFixed(1), escapes: escapes.length, escapeSamples: escapes, causes: snap.result ? snap.result.causes : null,
     maxIdle: +maxIdle.toFixed(1), fillHalf: fillHalf == null ? null : +fillHalf.toFixed(2), peakFill: +peakFill.toFixed(2),
     fines: snap.fines, inspectorDeaths: snap.result ? snap.result.inspectorDeaths : null,
+    // fix round 2: drowning share of the product spawned, time the pool reached its cap (s and
+    // fraction of the shift), donor:drowning warnings, litres wasted by drowning, 1 Hz fill trace
+    spawned, drownPct: spawned ? +(100 * snap.drownings / spawned).toFixed(1) : 0, drowningEvents, wasted: +wasted.toFixed(1),
+    capT: capT == null ? null : +capT.toFixed(1),
+    capFrac: capT == null || !Number.isFinite(sim.ctx.mode.clock.duration) ? null : +(capT / sim.ctx.mode.clock.duration).toFixed(2),
+    duration: Number.isFinite(sim.ctx.mode.clock.duration) ? sim.ctx.mode.clock.duration : null,
+    fillTrace: trace ? fillTrace : undefined,
     overtime: overtime ? { drainRate: sim.ctx.mode.drainRate, waves: sim.ctx.mode.waves.opened } : undefined,
   };
   sim.dispose();
@@ -100,11 +114,11 @@ async function main() {
   const out = [];
   for (const policy of policies) {
     for (let r = 0; r < runs; r++) {
-      const res = await runBot({ level, policy, seed: seed0 + r, overtime: has('overtime'), maxSeconds: Number(get('max', '400')), tune: get('tune', null) ? JSON.parse(get('tune', '{}')) : null });
+      const res = await runBot({ level, policy, seed: seed0 + r, overtime: has('overtime'), maxSeconds: Number(get('max', '400')), tune: get('tune', null) ? JSON.parse(get('tune', '{}')) : null, trace: has('trace') });
       out.push(res);
       if (!has('json')) {
         console.log(`[${res.level}] ${policy.padEnd(8)} seed=${res.seed} ${res.result.padEnd(9)} L=${res.liters.toFixed(1).padStart(6)} stars=${res.stars} quota=${JSON.stringify(res.quota)} `
-          + `kills=${res.kills} drown=${res.drownings} severs=${res.severs} alive=${res.alive} t=${res.time.toFixed(1)}s idle(max)=${res.maxIdle}s fill@half=${res.fillHalf} `
+          + `kills=${res.kills} drown=${res.drownings}/${res.spawned} cap@${res.capT ?? '-'}s severs=${res.severs} alive=${res.alive} t=${res.time.toFixed(1)}s idle(max)=${res.maxIdle}s fill@half=${res.fillHalf} `
           + `bodies(peak)=${res.peakBodies} step ms mean=${res.stepMsMean} max=${res.stepMsMax} vmax=${res.maxSpeed} escapes=${res.escapes}`);
       }
     }

@@ -37,12 +37,15 @@ export default {
   ],
   waves: [
     { at: 1.5, count: 5, types: { standard: 3, thinBlood: 2 } },
-    { at: 24, count: 3, types: { standard: 2, inspector: 1 } },
+    { at: 24, count: 3, types: { standard: 2, inspector: 1 }, fixed: true },
     { at: 46, count: 6, types: { standard: 3, thinBlood: 2, bigGiver: 1 }, props: [{ type: 'oxygenTank', count: 1 }] },
-    { at: 72, count: 3, types: { standard: 2, inspector: 1 } },
+    { at: 72, count: 3, types: { standard: 2, inspector: 1 }, fixed: true },
     { at: 94, count: 6, types: { standard: 3, bigGiver: 1, thinBlood: 2 }, props: [{ type: 'oxygenTank', count: 1 }] },
   ],
-  advanceWhenClear: false, // fixed timing: the Inspector visits are a readable window
+  // fix round 2 (PLAYTEST-1 M6): regular waves come when the drum is clear OR `waveGap` s after the
+  // previous regular wave, whichever is first; the Inspector visits (`fixed: true`) keep their `at`.
+  advanceWhenClear: true,
+  waveGap: 22,
   pa: [
     { at: 0.2, text: 'Happy Staff Appreciation Day. Today, the staff are giving back.', mood: 'calm' },
     { at: 22, text: 'An Inspector will visit shortly. Please keep him level until he leaves.', mood: 'calm' },

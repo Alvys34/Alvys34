@@ -22,6 +22,24 @@ import { floatTargetsOK } from '../quality.js';
 
 export const SURF = { BACK: 0, GLASS: 1, FLOOR: 2, CEIL: 3, LEFT: 4, RIGHT: 5 };
 
+/**
+ * Back-wall "clean patches" (readability, LOCAL-REPORT-1 §2.2): a stable low-frequency mask over
+ * the back wall (metres). 0 = clean patch (blood thins out there and is capped low on screen),
+ * 1 = may be fully painted. About a third of the wall is patch, so even a long shift leaves the
+ * pastel tiles showing through in blobs of 1-2 m; used by the decay pass and the wall overlay.
+ */
+const CLEAN_MASK_GLSL = /* glsl */`
+  float edcH2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float edcVN2(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(edcH2(i), edcH2(i + vec2(1.0, 0.0)), f.x), mix(edcH2(i + vec2(0.0, 1.0)), edcH2(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  float edcCleanMask(vec2 m) {
+    float n = edcVN2(m * 0.62 + vec2(3.1, 1.7)) * 0.65 + edcVN2(m * 1.45 + vec2(7.3, 2.9)) * 0.35;
+    return smoothstep(0.38, 0.52, n);
+  }`;
+const smoothstep01 = (x) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
+
 export function createBloodAtlas(ctx, { HW, HH, HD }) {
   const { THREE, renderer, drumGroup } = ctx;
   const AW = 4 * HW; const AH = 2 * HH + 4 * HD;
@@ -131,7 +149,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
   // ---------------- decay (drying + glass clearing) pass: dst *= src ----------------
   const decayUniforms = {
     uDry: { value: 1 }, uGlassC: { value: 1 }, uGlassE: { value: 1 }, uAtlas: { value: new THREE.Vector2(AW, AH) },
-    uGlass: { value: regionU[1] },
+    uGlass: { value: regionU[1] }, uBack: { value: regionU[0] }, uBackClean: { value: 1 },
   };
   const decayMat = new THREE.ShaderMaterial({
     name: 'bloodDecay',
@@ -139,12 +157,17 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
     vertexShader: 'varying vec2 vM; uniform vec2 uAtlas; void main(){ vM = (position.xy * 0.5 + 0.5) * uAtlas; gl_Position = vec4(position.xy, 0.0, 1.0); }',
     fragmentShader: /* glsl */`
       varying vec2 vM; uniform float uDry; uniform float uGlassC; uniform float uGlassE; uniform vec4 uGlass;
+      uniform vec4 uBack; uniform float uBackClean;
+      ${CLEAN_MASK_GLSL}
       void main() {
         float mr = 1.0;
         if (vM.x > uGlass.x && vM.x < uGlass.z && vM.y > uGlass.y && vM.y < uGlass.w) {
           vec2 g = (vM - uGlass.xy) / (uGlass.zw - uGlass.xy) * 2.0 - 1.0;
           float e = smoothstep(0.35, 0.95, max(abs(g.x), abs(g.y)));
           mr = mix(uGlassC, uGlassE, e);
+        } else if (vM.x < uBack.z && vM.y < uBack.w) {
+          // back wall: blood slides off / thins out in the "clean patches" (readability)
+          mr = mix(uBackClean, 1.0, edcCleanMask(vM - uBack.xy));
         }
         gl_FragColor = vec4(mr, mr * uDry, 1.0, 1.0);
       }`,
@@ -198,6 +221,8 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
     uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 640) },
     uBump: { value: 1.7 },
     uDec: { value: 1 / ENC },
+    uAtlasM: { value: new THREE.Vector2(AW, AH) }, uBackUV: { value: new THREE.Vector2((2 * HW) / AW, (2 * HH) / AH) },
+    uBackCap: { value: 0 }, // 0..1: how hard the clean patches are held back (grows with back-wall load)
   };
   function patch(material, glass) {
     material.onBeforeCompile = (sh) => {
@@ -208,6 +233,8 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           uniform sampler2D uBloodMap; uniform vec2 uTexel; uniform float uBump; uniform float uDec;
+          uniform vec2 uAtlasM; uniform vec2 uBackUV; uniform float uBackCap;
+          ${glass ? '' : CLEAN_MASK_GLSL}
           uniform vec3 uBloodFresh; uniform vec3 uBloodDeep; uniform vec3 uBloodDry; uniform vec3 uBloodHi;
           varying vec2 vBloodUv; varying vec3 vBT; varying vec3 vBB; varying vec2 vLocal;
           float bloodH(vec2 uv) { float d = texture2D(uBloodMap, uv).r * uDec; return 1.0 - exp(-d * 2.2); }
@@ -228,11 +255,18 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
             // dried stains let the tiles show through: the back wall never becomes a solid red sheet
             a *= mix(0.68, 1.0, smoothstep(0.1, 0.7, wet));
             ${glass ? `
+            // the glass is the player's window: low ceiling in the middle, a dirtier frame
             vec2 g = abs(vLocal * 2.0 - 1.0);
             float edge = smoothstep(0.30, 0.95, max(g.x, g.y));
-            float cap = mix(0.38, 0.86, edge);
-            a = min(a * 0.92, cap);
-            col = mix(col * 0.55, col, wet * 0.4);` : ''}
+            float cap = mix(0.2, 0.6, edge);
+            a = min(a * 0.85, cap);
+            col = mix(col * 0.55, col, wet * 0.4);` : `
+            // back wall: the pastel tiles always show a little, and the clean patches a lot once
+            // the wall is loaded (never a solid red sheet behind the hazards)
+            if (vBloodUv.x < uBackUV.x && vBloodUv.y < uBackUV.y) {
+              float cm = edcCleanMask(vBloodUv * uAtlasM);
+              a = min(a, mix(mix(0.9, 0.24, uBackCap), 0.88, cm));
+            }`}
             gBloodA = a; gBloodWet = wet; gBloodCov = cov;
             diffuseColor = vec4(col, a);
           }`)
@@ -334,7 +368,9 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
   let dirty = true; // needs a clear
   let decayAcc = 0;
   let glassLoad = 0; // m^2-ish of glass coverage (CPU estimate, decays with the glass clearing)
-  const GLASS_CAP = (2 * HW * 2 * HH) * 0.16; // hard cap: ~16 % "effective" coverage
+  const GLASS_CAP = (2 * HW * 2 * HH) * 0.1; // hard cap: ~10 % "effective" coverage
+  let backLoad = 0; // same estimate for the back wall (drives how hard the clean patches hold back)
+  const BACK_REF = (2 * HW * 2 * HH) * 2.2; // ~ the stamp area of a heavily painted wall (load 1)
   let dropped = 0;
 
   function setResolution(w) {
@@ -366,6 +402,8 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
       const area = halfLen * halfWidth * 4 * Math.min(1.5, amount);
       if (glassLoad + area > GLASS_CAP && kind !== 1) { dropped++; return false; }
       glassLoad += area * 0.6;
+    } else if (surf === SURF.BACK && kind !== 3) {
+      backLoad += halfLen * halfWidth * 4 * Math.min(1.5, amount);
     }
     const r = REG[surf];
     const i4 = n * 4;
@@ -385,15 +423,19 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
       renderPass(stampMesh, false);
       n = 0;
     }
+    shared.uBackCap.value = smoothstep01((backLoad / BACK_REF - 0.25) / 0.6);
     decayAcc += dt;
     if (decayAcc >= (FLOAT_OK ? 0.1 : 1.0)) { // 8-bit: bigger, rarer steps so small factors still move a texel
       const t = decayAcc; decayAcc = 0;
       // drying: wet -> dry over ~25 s; glass: centre clears in ~35 s, edges ~140 s; faster when over budget
       const over = glassLoad > GLASS_CAP * 0.8 ? 2.5 : 1;
       decayUniforms.uDry.value = Math.exp(-t / 22);
-      decayUniforms.uGlassC.value = Math.exp((-t / 35) * over);
-      decayUniforms.uGlassE.value = Math.exp((-t / 140) * over);
-      glassLoad *= Math.exp((-t / 50) * over);
+      decayUniforms.uGlassC.value = Math.exp((-t / 24) * over);
+      decayUniforms.uGlassE.value = Math.exp((-t / 110) * over);
+      glassLoad *= Math.exp((-t / 40) * over);
+      // back wall: clean patches shed their blood in ~12 s; the load estimate relaxes over ~90 s
+      decayUniforms.uBackClean.value = Math.exp(-t / 12);
+      backLoad *= Math.exp(-t / 90);
       renderPass(decayMesh, false);
     }
   }
@@ -401,10 +443,12 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
   return {
     SURF, REG, AW, AH, NORMALS, AXES_A, AXES_B, surfToLocal,
     stamp, flush, setResolution,
-    clear() { dirty = true; glassLoad = 0; n = 0; },
+    clear() { dirty = true; glassLoad = 0; backLoad = 0; shared.uBackCap.value = 0; n = 0; },
     setStampCap(c) { stampCap = Math.max(64, Math.min(CAP, c | 0)); },
     get pending() { return n; },
     get glassLoad() { return glassLoad / GLASS_CAP; },
+    get backLoad() { return backLoad / BACK_REF; },
+    get backCap() { return shared.uBackCap.value; },
     get dropped() { return dropped; },
     get resolution() { return [texW, texH]; },
     get texture() { return rt ? rt.texture : null; },

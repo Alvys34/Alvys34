@@ -14,14 +14,46 @@
 // (icon, version info) with the pure-JS `resedit` library.
 import { packager } from '@electron/packager';
 import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { generateIcons } from './make-icon.mjs';
+import yazl from 'yazl';
 
 const require = createRequire(import.meta.url);
+
+/**
+ * Zip `dir` (as a top-level folder of the same name) into `zipPath`, keeping Unix modes and symlinks.
+ * Files whose base name is in `exec` are stored 0755 regardless of the host file system.
+ */
+function zipFolder(dir, zipPath, { exec = new Set() } = {}) {
+  return new Promise((resolve, reject) => {
+    const zip = new yazl.ZipFile();
+    const top = path.basename(dir);
+    const walk = (abs, rel) => {
+      const entries = fs.readdirSync(abs, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1));
+      if (!entries.length) zip.addEmptyDirectory(rel);
+      for (const e of entries) {
+        const a = path.join(abs, e.name); const r = `${rel}/${e.name}`;
+        const st = fs.lstatSync(a);
+        if (st.isSymbolicLink()) zip.addBuffer(Buffer.from(fs.readlinkSync(a)), r, { mode: 0o120777, mtime: st.mtime, compress: false });
+        else if (st.isDirectory()) walk(a, r);
+        else if (st.isFile()) {
+          const perm = exec.has(e.name) ? 0o755 : (st.mode & 0o777) | 0o644;
+          zip.addFile(a, r, { mode: 0o100000 | perm, mtime: st.mtime, compress: true });
+        }
+      }
+    };
+    try { walk(dir, top); } catch (e) { reject(e); return; }
+    const out = fs.createWriteStream(zipPath);
+    out.on('close', resolve);
+    out.on('error', reject);
+    zip.outputStream.on('error', reject).pipe(out);
+    zip.end();
+  });
+}
 const DESKTOP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(DESKTOP, '..');
 const RELEASE = path.join(DESKTOP, 'release');
@@ -245,7 +277,11 @@ for (const plat of PLATFORMS) {
   if (!flag('no-zip')) {
     const zipPath = `${finalDir}.zip`;
     rmrf(zipPath);
-    execFileSync('zip', ['-qr9X', '-y', path.basename(zipPath), path.basename(finalDir)], { cwd: RELEASE });
+    // pure-Node zip (no `zip` binary on Windows). Linux: launcher, binary and helpers are stored
+    // 0755 even when this host's file system cannot keep exec bits (NTFS) - the folder itself still
+    // loses them there, so build the Linux depot on Linux / WSL (docs/STEAM_RELEASE.md).
+    const exec = plat === 'linux' ? new Set([EXE_NAME, `${EXE_NAME}.sh`, 'chrome-sandbox', 'chrome_crashpad_handler']) : new Set();
+    await zipFolder(finalDir, zipPath, { exec });
     zipSize = fs.statSync(zipPath).size;
     step(`[${plat}] ${path.relative(DESKTOP, zipPath)}  ${mb(zipSize)}`);
   }

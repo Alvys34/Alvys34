@@ -74,11 +74,15 @@ async function boot() {
   // per-frame main-thread cost split (ms, summed until __edc.perfReset()): sim / view / ui / audio
   const perf = { frames: 0, steps: 0, sim: 0, view: 0, ui: 0, audio: 0, maxFrame: 0 };
   const now = () => performance.now();
+  // render wiring (VFX): per-frame cost for the quality governor, and the shader warm-up hold —
+  // while a level's shaders are still compiling (render/precompile.js) the RAF loop does not advance
+  // the sim, so the shift's first interactive frame comes after the warm-up (harness stepNow is never held)
+  let frameSimMs = 0; let lastBusyMs = 0; let holdSim = false;
   const loop = createLoop({
     dt: TUNABLES.sim.dt,
     maxStepsPerFrame: TUNABLES.sim.maxStepsPerFrame,
-    step: () => { const t0 = now(); sim.step(); perf.sim += now() - t0; perf.steps++; },
-    onFrameStart: (realDt) => { const t0 = now(); ui.frame(realDt); perf.ui += now() - t0; },
+    step: () => { if (holdSim) return; const t0 = now(); sim.step(); const ms = now() - t0; perf.sim += ms; frameSimMs += ms; perf.steps++; },
+    onFrameStart: (realDt) => { holdSim = view.warming; const t0 = now(); ui.frame(realDt); perf.ui += now() - t0; },
     render,
   });
   const ui = createUI({ root: uiRoot, bus, simBus, sim, view, loop, input, audio: safeAudio, canvas, params, debug: DEBUG });
@@ -96,13 +100,15 @@ async function boot() {
     }
     return haz;
   }
-  const frameInfo = { realDt: 0, timeScale: 1, paused: false, slowMo: false, hitStop: false };
+  const frameInfo = { realDt: 0, timeScale: 1, paused: false, slowMo: false, hitStop: false, simMs: 0, busyMs: 0 };
   function render(alpha, realDt, simDt) {
-    const scale = loop.timeScale;
+    const held = holdSim; holdSim = false;
+    const scale = held ? 0 : loop.timeScale;
     const t0 = now();
     frameInfo.realDt = realDt; frameInfo.timeScale = scale; frameInfo.paused = loop.paused;
     frameInfo.slowMo = loop.slowMoActive; frameInfo.hitStop = loop.hitStopActive;
-    view.update(sim.state, alpha, simDt, frameInfo);
+    frameInfo.simMs = frameSimMs; frameInfo.busyMs = lastBusyMs; frameSimMs = 0;
+    view.update(sim.state, held ? 1 : alpha, held ? 0 : simDt, frameInfo);
     const t1 = now();
     ui.update(realDt);
     const t2 = now();
@@ -113,6 +119,7 @@ async function boot() {
     const t3 = now();
     perf.frames++; perf.view += t1 - t0; perf.ui += t2 - t1; perf.audio += t3 - t2;
     if (t3 - t0 > perf.maxFrame) perf.maxFrame = t3 - t0;
+    lastBusyMs = frameInfo.simMs + (t3 - t0);
   }
 
   window.addEventListener('resize', () => view.resize());

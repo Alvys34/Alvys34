@@ -10,7 +10,7 @@
 import { icon, logoMark } from './icons.js';
 import { esc, h, fmtL, fmtClock, pad2, onActivate } from './dom.js';
 import { getSave, setOvertimeInitials } from '../core/save.js';
-import { RESULTS, RESULT_HEADLINES, STAT_LINES, MENU, OVERTIME, ENDING } from './copy.js';
+import { RESULTS, STAT_LINES, MENU, OVERTIME, ENDING, resultHeadline } from './copy.js';
 import { hints, overtimeRows } from './screens.js';
 
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
@@ -27,18 +27,37 @@ function contentLines(r) {
   });
 }
 
+/** "Drownings: 0. Exemplary." only means something when a few donors were actually processed. */
+const FEW_PROCESSED = 3;
+const isExemplaryDrown = (l) => /^drownings$/i.test(l.k) && /^0\b/.test(l.v);
+/** compliance bonus withheld (sim field; any of these names), unless a content line already says so */
+function withheldLine(r, lines) {
+  const w = r && (r.complianceWithheld ?? r.complianceBonusWithheld ?? r.bonusWithheld);
+  if (!w || lines.some((l) => /withheld/i.test(`${l.k} ${l.v}`))) return null;
+  const v = typeof w === 'string' ? w : typeof w === 'number' && w > 0 ? `${RESULTS.withheldV} (${fmtL(w)} L)` : RESULTS.withheldV;
+  return { k: RESULTS.withheldK, v };
+}
+
 export function chooseStatLines(r, x, max = 7) {
+  const few = (r && r.kills != null ? r.kills : 0) < FEW_PROCESSED;
   const fromContent = contentLines(r);
   if (fromContent && fromContent.length) {
     const head = r.kills != null ? [{ k: 'Donors processed', v: `${r.kills}${r.donorsTotal ? ` / ${r.donorsTotal}` : ''}` }] : [];
-    const body = fromContent.filter((l) => !/^donors processed/i.test(l.k));
+    let body = fromContent.filter((l) => !/^donors processed/i.test(l.k) && !(few && isExemplaryDrown(l)));
+    // a withheld bonus is news: keep it right after the head
+    const wl = withheldLine(r, body);
+    const pinned = body.filter((l) => /withheld/i.test(`${l.k} ${l.v}`));
+    body = body.filter((l) => !pinned.includes(l));
+    if (wl) pinned.unshift(wl);
     // keep the closing deadpan lines (last two) and trim from the middle if needed
-    const room = Math.max(2, max - head.length);
+    const room = Math.max(2, max - head.length - pinned.length);
     const out = body.length > room ? [...body.slice(0, room - 2), ...body.slice(-2)] : body;
-    return [...head, ...out];
+    return [...head, ...pinned, ...out];
   }
   const all = STAT_LINES.map((f) => { try { return f(r, x || {}); } catch { return null; } }).filter(Boolean);
+  const wl = withheldLine(r, all);
   const always = all.filter((l) => l.always && !l.tail);
+  if (wl) always.push(wl);
   const tail = all.filter((l) => l.tail);
   const rest = all.filter((l) => !l.always).sort((a, b) => (b.w || 0) - (a.w || 0));
   const room = Math.max(0, max - always.length - tail.length);
@@ -78,10 +97,8 @@ export function createReports(app) {
       const e = results.el;
       const lv = o.level;
       e.querySelector('.r-kicker').textContent = lv ? `Shift ${pad2(lv.number)} · ${lv.name}` : '';
-      const head = r.result === 'complete'
-        ? ((r.report && r.report.title) || RESULT_HEADLINES[Math.max(1, r.stars)])
-        : (RESULT_HEADLINES[r.result] || RESULT_HEADLINES.timeout);
-      e.querySelector('.headline').textContent = head;
+      // the UI owns the headline (keyed by drops), whatever report.title the sim sends
+      e.querySelector('.headline').textContent = resultHeadline(r);
       e.querySelector('.headline').dataset.state = r.stars > 0 ? 'ok' : 'miss';
       const quota = (lv && lv.quota) || [1, 2, 3];
       const max = Math.max(quota[2] * 1.12, 1); // fixed scale: thresholds keep their places, a big total just fills the bar
@@ -130,7 +147,11 @@ export function createReports(app) {
       const stamps = e.querySelector('.stamps');
       stamps.classList.remove('in');
       marks.forEach((m) => m.classList.remove('got', 'pop'));
-      const target = r.liters;
+      // every report counts up from zero (never from the previous report's figure)
+      if (results.anim && !results.anim.done) results.anim.done = true;
+      totalN.textContent = fmtL(0);
+      fill.style.width = '0%';
+      const target = Math.max(0, Number(r.liters) || 0);
       const dur = 700 + Math.min(1300, target * 12);
       let lit = 0;
       const t0 = performance.now() + 250;
@@ -205,7 +226,7 @@ export function createReports(app) {
     show(r, o) {
       const e = ot.el;
       e.querySelector('.total-n').textContent = fmtL(r.liters);
-      const otLines = contentLines(r);
+      const otLines = (contentLines(r) || []).filter((l) => !((r.kills ?? 0) < FEW_PROCESSED && isExemplaryDrown(l)));
       e.querySelector('.ot-lines').innerHTML = (otLines || []).slice(0, 5).map((l) => `<div class="sl"><dt>${esc(l.k)}</dt><dd>${esc(l.v)}</dd></div>`).join('');
       e.querySelector('.ot-break').innerHTML = `
         <div><dt>${esc(OVERTIME.survived)}</dt><dd class="num">${fmtClock(r.time)}</dd></div>

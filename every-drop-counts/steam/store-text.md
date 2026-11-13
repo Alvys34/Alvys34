@@ -3,9 +3,10 @@
 Draft 1, 2026-11-13. Voice: the in-game voice (`src/ui/copy.js`): short, deadpan, corporate,
 slightly too cheerful, sentence case, almost no exclamation marks.
 
-**Brand name:** the in-game fictional brand "DRAINWELL" is a live US trademark (see
-`docs/local/LOCAL-REPORT-1.md`, title check), so this text deliberately avoids it and says
-"the Center" instead. When the brand is renamed, nothing here has to change. The capsules in this
+**Brand name:** the in-game fictional brand was renamed to the provisional "SUNNYVEIN" (the
+previous name is a live US trademark, see `docs/local/LOCAL-REPORT-1.md`, title check). This text
+deliberately avoids the brand and says "the Center" instead, so nothing here has to change when
+the name is confirmed. The capsules in this
 folder show only the game title, no brand.
 
 Steam limits: short description ≤ 300 characters. Long description: no hard limit, BBCode-style

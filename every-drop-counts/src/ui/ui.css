@@ -1,4 +1,4 @@
-/* EVERY DROP COUNTS — UI. DRAINWELL™ house style: laminated hospital wayfinding signage.
+/* EVERY DROP COUNTS — UI. Brand house style: laminated hospital wayfinding signage.
    Cream + white, ink teal-green text, ONE accent (mint: focus / ready / positive),
    hazard amber for urgency (taken from the machinery), red ONLY for blood values (litres, drops).
    Sizes in rem; the root size scales with the viewport (16px floor, 20px at 1080p, 40px at 4K). */
@@ -175,14 +175,34 @@ body[data-mode='ending'] .veil { opacity: 0; }
 .pa.glitchy { animation: pa-jitter 0.18s steps(2) infinite; }
 @keyframes pa-jitter { 0% { transform: translate(0, 0); } 50% { transform: translate(0.12rem, -0.06rem); } 100% { transform: translate(-0.1rem, 0.05rem); } }
 
-.prompt { position: absolute; left: 50%; bottom: calc(var(--safe) + 0.5rem); transform: translateX(-50%); display: flex; align-items: center; gap: 0.6rem;
+/* teaching prompt: top centre, in the band above the drum (never over the play area / floor hazards) */
+.prompt { position: absolute; left: 50%; top: var(--safe); transform: translateX(-50%); display: flex; align-items: center; gap: 0.6rem;
   background: var(--ink); color: var(--white); border-radius: 2rem; padding: 0.5rem 1.1rem 0.5rem 0.7rem; font-weight: 900; font-size: 1.1rem; box-shadow: var(--shadow); white-space: nowrap; }
 .prompt .glyph.key { border-color: var(--white); }
 .prompt .glyph.btn, .prompt .glyph.trig { background: var(--white); color: var(--ink); }
 .prompt .glyph.stick { border-color: var(--white); box-shadow: inset 0 0 0 0.18em var(--ink), inset 0 0 0 0.5em var(--white); color: var(--ink); }
 .prompt .glyph-or { color: var(--ink-3); }
 .prompt.enter { animation: prompt-in 0.3s var(--ease); }
-@keyframes prompt-in { from { opacity: 0; transform: translate(-50%, 0.8rem); } }
+@keyframes prompt-in { from { opacity: 0; transform: translate(-50%, -0.8rem); } }
+
+/* Overtime demand: tier + drain rate, bar = progress to the next tier */
+.demand { margin-top: 0.35rem; padding-top: 0.35rem; border-top: 0.1rem solid var(--rule); }
+.demand-row { display: flex; align-items: baseline; gap: 0.45rem; white-space: nowrap; }
+.demand-l { font-size: 0.75rem; font-weight: 1000; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.demand-tier { font-size: 1.05rem; font-weight: 1000; color: var(--ink); }
+.demand-rate { margin-left: auto; font-size: 0.85rem; font-weight: 900; color: var(--ink-2); }
+.demand.idle .demand-rate { margin-left: 0; font-weight: 800; }
+.demand-bar { height: 0.35rem; margin-top: 0.25rem; background: #edf2ef; border-radius: 0.2rem; overflow: hidden; }
+.demand-bar i { display: block; height: 100%; background: var(--amber); transform-origin: left center; transform: scaleX(0); transition: transform 0.25s linear; }
+.demand.pop .demand-tier { animation: drop-pop 0.45s var(--ease); display: inline-block; }
+.hud[data-mode='overtime'] .feed { top: calc(var(--safe) + 12.2rem); }
+.hud[data-mode='overtime'] .gauge-next:empty { display: none; }
+
+/* world popups (e.g. "−2.4 L wasted" at a drowned donor): pale, never blood-red (lost product) */
+.popups { position: absolute; inset: 0; overflow: hidden; z-index: 1; pointer-events: none; }
+.popup { position: absolute; left: 0; top: 0; white-space: nowrap; font-weight: 1000; font-size: 0.95rem; opacity: 0; will-change: transform, opacity;
+  padding: 0.15rem 0.55rem; border-radius: 0.6rem; background: rgba(251, 248, 241, 0.88); color: var(--ink-2); box-shadow: 0 0.1rem 0.35rem rgba(27, 58, 51, 0.25); }
+.popup.wasted { color: #6b7f7a; }
 .restart-ring { position: absolute; left: 50%; bottom: calc(var(--safe) + 3.8rem); transform: translateX(-50%); display: flex; align-items: center; gap: 0.5rem;
   background: rgba(255, 255, 255, 0.95); border-radius: 2rem; padding: 0.35rem 0.9rem 0.35rem 0.35rem; box-shadow: var(--shadow); font-weight: 900; }
 .restart-ring svg { width: 2rem; height: 2rem; transform: rotate(-90deg); }
@@ -286,6 +306,19 @@ body[data-mode='menu'] .bubble, body[data-mode='boot'] .bubble { font-size: 0.8r
 .brief-kicker { font-size: 0.85rem; font-weight: 1000; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mint-ink); }
 .brief-name { margin: 0.2rem 0 0.7rem; font-size: 2.6rem; font-weight: 1000; line-height: 0.98; letter-spacing: -0.02em; }
 .brief-text { margin: 0 0 1.2rem; font-size: 1.25rem; font-weight: 800; line-height: 1.3; color: var(--ink); max-width: 24em; }
+/* "Tip from Management": the level's tactic line, set apart like a laminated memo */
+.brief-tip { margin: 0 0 1.1rem; padding: 0.65rem 0.9rem 0.7rem; background: var(--mint-soft); border-radius: 0.8rem; box-shadow: inset 0.3rem 0 0 var(--mint-ink); max-width: 28em; }
+.tip-l { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 1000; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mint-ink); }
+.tip-l svg.ico { width: 1rem; height: 1rem; }
+.tip-t { margin: 0.25rem 0 0; font-size: 1.05rem; font-weight: 800; line-height: 1.3; color: var(--ink); }
+/* new this shift: hazard / donor / verb callouts */
+.brief-news { margin: 0 0 1.1rem; }
+.news-l { display: block; font-size: 0.75rem; font-weight: 1000; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 0.4rem; }
+.news-list { display: flex; flex-wrap: wrap; gap: 0.45rem 0.5rem; }
+.news-item { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.7rem 0.25rem 0.3rem; border-radius: 2rem; background: var(--white);
+  box-shadow: inset 0 0 0 0.13rem var(--amber); font-weight: 900; font-size: 0.95rem; white-space: nowrap; }
+.news-ico { width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--amber-soft); display: flex; align-items: center; justify-content: center; }
+.news-ico svg.ico { width: 1.15rem; height: 1.15rem; }
 .brief-meta { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; margin-bottom: 1.4rem; }
 .meta-quota { display: flex; gap: 0.9rem; }
 .meta-quota .q { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 900; }
@@ -518,6 +551,8 @@ body[data-mode='ending'] .toasts { display: none; }
   .clock-plate.urgent .clock { font-size: 2.35rem; }
   .clock-meta { gap: 0.6rem; margin-top: 0.2rem; font-size: 0.82rem; }
   .feed { top: calc(var(--safe) + 7.4rem); width: 12.5rem; }
+  .hud[data-mode='overtime'] .feed { top: calc(var(--safe) + 10rem); }
+  .prompt { font-size: 1rem; padding: 0.4rem 0.95rem 0.4rem 0.6rem; }
   .combo { top: calc(var(--safe) + 7.2rem); }
   body[data-mode='playing'] .toasts { top: calc(var(--safe) + 15.4rem); }
 }
