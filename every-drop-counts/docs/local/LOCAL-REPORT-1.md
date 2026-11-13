@@ -1,6 +1,9 @@
 # LOCAL-REPORT-1 — first pass on a real GPU, a display and Windows
 
-2026-11-13, branch `ccr-567c397f-f3s53e` at `cf1c396` (no new cloud commits landed during this pass).
+2026-11-13, branch `ccr-567c397f-f3s53e`. Everything was measured on `cf1c396`. The integration
+commit `6ee2927` landed as this report was pushed and was **not re-measured**; it changes only
+comments in `camera.js` (zoom rate unchanged), the desktop smoke path, docs and audio calibration
+tooling, so the findings below still apply.
 Machine: Windows 11 Pro 26200, Ryzen 7 9800X3D, **Radeon RX 9070 XT** (driver 32.0.32015), plus the
 CPU's **Radeon iGPU (2 CU RDNA2)**, 32 GB, primary monitor 2560×1440 @ 180 Hz. Chrome 157 (system),
 Electron 45.3.1 for the desktop build.
