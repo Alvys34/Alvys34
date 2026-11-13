@@ -1,0 +1,18 @@
+// SteamPipe app build script for EVERY DROP COUNTS.
+// Fill in the ids (or run `npm run steam:vdf -- --app <id> --win-depot <id> --linux-depot <id>`,
+// which writes ready-to-run copies with absolute paths into desktop/steam/generated/).
+// Upload: steamcmd +login <build_account> +run_app_build "<ABSOLUTE path to this file>" +quit
+"AppBuild"
+{
+	"AppID"       "__APP_ID__"            // your Steam app id
+	"Desc"        "__BUILD_DESC__"        // shows up in Steamworks > SteamPipe > Builds
+	"Preview"     "0"                     // "1" = dry run: computes the upload, sends nothing
+	"SetLive"     "__BRANCH__"            // empty, or a NON-default branch such as "beta"
+	"ContentRoot" "../release/"           // relative to this file: the folders made by npm run build:all
+	"BuildOutput" "./output/"             // logs + cache (keep it between uploads for faster diffs)
+	"Depots"
+	{
+		"__WIN_DEPOT_ID__"   "depot_build_windows.vdf"
+		"__LINUX_DEPOT_ID__" "depot_build_linux.vdf"
+	}
+}

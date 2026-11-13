@@ -1,0 +1,13 @@
+// Windows x64 depot: the contents of release/EveryDropCounts-win-x64/ become the install folder root.
+"DepotBuild"
+{
+	"DepotID" "__WIN_DEPOT_ID__"
+	"FileMapping"
+	{
+		"LocalPath" "EveryDropCounts-win-x64/*"   // relative to ContentRoot of the app build
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "*.pdb"
+	"FileExclusion" "steam_appid.txt"
+}

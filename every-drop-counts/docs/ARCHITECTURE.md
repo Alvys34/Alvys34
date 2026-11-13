@@ -170,3 +170,13 @@ draw-call / triangle counts instead (`renderer.info`).
 6. Do not commit secrets, do not fetch assets from the internet, do not add telemetry.
 7. Verify your work by running it (sim bot, screenshots you actually look at) before reporting.
    Report honestly: what works, what is rough, what you did not verify.
+
+## Desktop runtime constraints (added after Phase 1 — binding for all web code)
+
+- In Electron the game is served from the private origin `app://game/` (not `file://`). Saves are
+  tied to that origin; it must never change after release.
+- A strict CSP applies: **no inline `<script>`, no `eval` / `new Function`, no remote URLs of any
+  kind** (http/https/ws requests are cancelled). WebAssembly, inline styles, `data:` and `blob:`
+  URLs are allowed. Workers must be bundled files or blob URLs.
+- `edcDesktop.setFullscreen(bool)` returns `Promise<boolean>` (the new state).
+- Final builds: `cd desktop && npm ci && npm run build:release && npm run smoke && npm run verify`.

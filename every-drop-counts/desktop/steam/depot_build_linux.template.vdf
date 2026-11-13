@@ -1,0 +1,13 @@
+// Linux x64 depot: the contents of release/EveryDropCounts-linux-x64/ become the install folder root.
+// Upload from Linux/macOS/WSL so the executable bits on EveryDropCounts and EveryDropCounts.sh survive.
+"DepotBuild"
+{
+	"DepotID" "__LINUX_DEPOT_ID__"
+	"FileMapping"
+	{
+		"LocalPath" "EveryDropCounts-linux-x64/*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "steam_appid.txt"
+}

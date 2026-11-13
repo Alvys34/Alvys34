@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDC audio test bench</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; background: #f4f7f5; color: #1c2a24; }
+  @media (prefers-color-scheme: dark) { body { background: #151a18; color: #dfe9e4; } }
+  button { margin: 2px; padding: 4px 8px; }
+  fieldset { margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>Every Drop Counts: audio test bench</h1>
+<p>Automated runs: <code>node tools/audio/run.mjs</code>. Manual audition: click Unlock, then fire events.</p>
+<button id="unlock">Unlock</button>
+<label>fill <input id="fill" type="range" min="0" max="1" step="0.01" value="0"></label>
+<label>ω <input id="omega" type="range" min="-2.2" max="2.2" step="0.01" value="0"></label>
+<label>screen <select id="screen"><option>menu</option><option selected>playing</option><option>paused</option><option>results</option></select></label>
+<fieldset id="events"><legend>events</legend></fieldset>
+<script type="module">
+  import './harness.js';
+  import { createAudio, EVENT_NAMES } from '../../src/audio/index.js';
+  const bus = window.__audioHarness && (() => { const m = new Map(); return { on(t, f) { (m.get(t) || m.set(t, new Set()).get(t)).add(f); return () => m.get(t).delete(f); }, emit(t, p) { const s = m.get(t); if (s) for (const f of s) f(p); } }; })();
+  let audio = null;
+  document.getElementById('unlock').onclick = () => {
+    if (!audio) { audio = createAudio(); audio.attach(bus); let last = performance.now();
+      const loop = () => { const n = performance.now(); audio.update((n - last) / 1000, { screen: screen.value, fill: +fill.value, drumOmega: +omega.value, intensity: +fill.value, timeScale: 1, sawLoad: 0, grinderLoad: 0, aliveCount: 10 }); last = n; requestAnimationFrame(loop); }; loop(); }
+    audio.unlock();
+  };
+  const samples = { 'donor:death': { cause: 'cut', pan: 0 }, 'pa:announce': { text: 'Thank you for donating.', mood: 'calm' }, 'impact': { kind: 'flesh', speed: 12, mass: 6, pan: 0 }, 'hazard:contact': { hazard: 'saw', intensity: 1, pan: 0 }, 'combo': { multiplier: 4 }, 'ui:star': { n: 3 }, 'shift:end': { result: 'complete' }, 'blood:splat': { size: 1 }, splash: { size: 1 } };
+  for (const t of EVENT_NAMES) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => bus.emit(t, samples[t] || { pan: 0 }); document.getElementById('events').append(b); }
+</script>
+</body>
+</html>

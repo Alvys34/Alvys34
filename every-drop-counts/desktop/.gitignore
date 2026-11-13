@@ -1,0 +1,5 @@
+node_modules/
+release/
+.stage/
+steam/output/
+steam/generated/
