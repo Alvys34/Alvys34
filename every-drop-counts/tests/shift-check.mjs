@@ -35,3 +35,6 @@ export async function checkShift(level, policy, seed) {
   sim.dispose();
   return r;
 }
+
+/** shifts whose quotas must be retuned after the fix-round-2 systems pass (see shifts-a/b tests) */
+export const RETUNE_PENDING = new Set([4, 5, 6]);
