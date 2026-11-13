@@ -9,8 +9,12 @@
  *   bottom-centre one-line teaching prompt / hold-to-restart ring
  * Overtime swaps the tank plate to tank volume + demand (drain) and the clock to time survived.
  *
- *   const hud = createHud({ root, bus, getSettings });
+ *   const hud = createHud({ root, bus, getSettings, onInsets });
  *   hud.reset(level, mode); hud.update(snapshot, live, realDt); hud.setVisible(bool)
+ * onInsets({ top, left, right } | null): the top-corner plates as viewport fractions (bottom edge,
+ * left/right plate widths) while visible, so the camera can keep drum corners out from under them.
+ * PA lines that name keyboard keys ("Hold A / D to …", "Press SPACE to …") are rephrased without
+ * the keys: the bottom prompt already teaches the control with a device-aware glyph.
  */
 import { icon } from './icons.js';
 import { HUD, reasonLabel } from './copy.js';
@@ -21,7 +25,23 @@ const fmtUp = (s) => { const t = Math.max(0, Math.floor(s)); return `${Math.floo
 const odometer = (v) => { const t = Math.max(0, v).toFixed(1); const p = t.padStart(5, '0'); const lead = p.length - t.length; return lead > 0 ? `<span class="lz">${p.slice(0, lead)}</span>${t}` : t; };
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export function createHud({ root, bus, getSettings }) {
+/**
+ * "Hold A / D to rotate the drum. Gravity …" -> "Please rotate the drum. Gravity …";
+ * "Press SPACE to SLAM. …" -> "Please SLAM the drum. …". Lines without key names pass unchanged.
+ */
+const KEY = String.raw`(?:[A-Z]|SPACE|SHIFT|ESC|ENTER|TAB|[←→↑↓]|LT|RT|LB|RB)`;
+const KEY_LINE = new RegExp(String.raw`\b(?:Hold|Press|Tap|Use)\s+(?:the\s+)?${KEY}(?:\s*(?:\/|or|,|and)\s*${KEY})*(?:\s+keys?|\s+button)?\s+to\s+([^.!?]+)([.!?])`, 'g');
+export function stripKeyNames(text) {
+  return String(text || '').replace(KEY_LINE, (m, what, end) => {
+    let w = what.trim();
+    if (/^slam$/i.test(w)) w = 'SLAM the drum';
+    else if (!/\s/.test(w)) w = `${w.toLowerCase()} the drum`;
+    else w = w.charAt(0).toLowerCase() + w.slice(1);
+    return `Please ${w}${end}`;
+  });
+}
+
+export function createHud({ root, bus, getSettings, onInsets = null }) {
   const el = document.createElement('div');
   el.className = 'hud';
   el.setAttribute('aria-hidden', 'true');
@@ -141,7 +161,7 @@ export function createHud({ root, bus, getSettings }) {
   }
 
   function showPa(text, mood) {
-    paFull = String(text || '');
+    paFull = stripKeyNames(text);
     paMood = mood || 'calm';
     paShown = 0;
     paTimer = Math.max(4.5, paFull.length * 0.075 + 2.5);
@@ -188,7 +208,26 @@ export function createHud({ root, bus, getSettings }) {
     return out;
   }
 
+  // ---------------- HUD footprint for the camera ----------------
+  let visible = false; let insetT = 0; let lastIns = '';
+  function reportInsets() {
+    if (!onInsets) return;
+    let ins = null;
+    if (visible) {
+      const W = window.innerWidth || 1; const H = window.innerHeight || 1;
+      const a = tankPlate.getBoundingClientRect(); const b = clockPlate.getBoundingClientRect();
+      ins = { top: Math.max(a.bottom, b.bottom) / H, left: a.right / W, right: (W - b.left) / W };
+    }
+    const key = ins ? `${ins.top.toFixed(3)}|${ins.left.toFixed(3)}|${ins.right.toFixed(3)}` : '';
+    if (key === lastIns) return;
+    lastIns = key;
+    try { onInsets(ins); } catch (e) { console.warn(e); }
+  }
+  window.addEventListener('resize', () => { insetT = 0; });
+
   function update(s, live, dt) {
+    insetT -= dt;
+    if (insetT <= 0) { insetT = 0.5; reportInsets(); }
     if (!s) return;
     const settings = getSettings();
     const reduce = !!settings.reduceFlashing;
@@ -336,7 +375,8 @@ export function createHud({ root, bus, getSettings }) {
   return {
     el,
     reset, update, setPrompt, setRestart,
-    setVisible(v) { el.classList.toggle('on', !!v); },
+    setVisible(v) { el.classList.toggle('on', !!v); visible = !!v; reportInsets(); },
+    reportInsets,
     dispose() { offs.forEach((o) => o()); el.remove(); },
   };
 }

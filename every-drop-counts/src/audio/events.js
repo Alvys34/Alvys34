@@ -1,21 +1,20 @@
 // Bus event -> sound mapping. Every handler is wrapped by the engine (never throws out).
-// Payload magnitudes (size, speed×mass, rate, amount, intensity) have no fixed units in the
-// contract, so they are normalised adaptively against a slow running average: an average event
-// maps to ~0.5, a big one towards 1.
+// Payload magnitudes are mapped with FIXED curves calibrated against real sim payloads
+// (tools/audio/calibrate.mjs, shifts 1/4/7/8 with the smart bot, 430 s of play):
+//   impact speed×mass (m/s·kg) p10 14, p50 45, p90 177, p99 580, max ~2200   (~40 events/s)
+//   blood:splat size 0..1 (p50 0.11)          splash size 0.08..1 (p50 0.45, ~15/s)
+//   blood:spurt rate L/s p50 0.29, p90 1.05, max ~4.2   donor:hurt amount hp p50 14, p90 140
+//   hazard:contact intensity 0.35..1          grinder:swallow liters 0..0.4
+// So the constant tumbling stays near-silent and only the top ~10 % of hits are loud — the old
+// running-average normaliser drifted down during calm stretches and made small taps loud again.
 import { DUCK } from './mix.js';
 
-class Adapt {
-  constructor(init) { this.ref = init; }
-  norm(x) {
-    x = Number(x);
-    if (!Number.isFinite(x) || x < 0) x = 0;
-    x = Math.min(x, this.ref * 1000);
-    this.ref += (x - this.ref) * 0.01;
-    if (!(this.ref > 1e-6)) this.ref = 1e-6;
-    const n = x / (x + this.ref);
-    return Number.isFinite(n) ? n : 0;
-  }
-}
+const clamp01 = (x) => (x > 0 ? (x < 1 ? x : 1) : 0);
+const pos = (x) => { x = Number(x); return Number.isFinite(x) && x > 0 ? x : 0; };
+/** log-scale 0..1 between lo and hi */
+const logn = (x, lo, hi) => clamp01(Math.log(Math.max(pos(x), 1e-9) / lo) / Math.log(hi / lo));
+/** soft saturating 0..1 with half-point `half` */
+const sat = (x, half) => { const v = pos(x); return v / (v + half); };
 
 const semis = (s) => Math.pow(2, s / 12);
 const num = (x, d = 0) => (Number.isFinite(Number(x)) ? Number(x) : d);
@@ -38,11 +37,8 @@ function voiceRate(type, id) {
 }
 
 export function makeHandlers(eng) {
-  const A = {
-    size: new Adapt(1), splash: new Adapt(1), energy: new Adapt(20), rate: new Adapt(1),
-    amount: new Adapt(10), intensity: new Adapt(0.5),
-  };
   const lastHurt = new Map();
+  let crushT = -9; let swallowT = -9;
   const rockets = [];
   let deathWindowT = -1, deathWindowN = 0;
 
@@ -74,9 +70,12 @@ export function makeHandlers(eng) {
       const t = now();
       const key = p.id ?? 'x';
       if (t - (lastHurt.get(key) ?? -9) < 0.7) return;
+      if (p.alive === false) return; // corpses do not yelp (the sim keeps reporting damage to them)
+      const amt = pos(p.amount);
+      if (amt < 4) return; // posture scuffs and bruises
       lastHurt.set(key, t);
       if (lastHurt.size > 400) lastHurt.clear();
-      const n = A.amount.norm(p.amount);
+      const n = sat(amt, 60);
       P('vocal', 'vHurt', { gain: 0.55 + 0.45 * n, pan: p.pan, rate: voiceRate(p.type, p.id), pitch: 0.5 });
     },
     'donor:death'(p) {
@@ -139,11 +138,15 @@ export function makeHandlers(eng) {
     },
     impact(p) {
       const e = Math.max(0, num(p.speed)) * Math.max(0.05, num(p.mass, 1));
-      const n = A.energy.norm(e);
-      if (n < 0.2) return; // soft contacts stay silent
-      const g = Math.pow(Math.min(1, (n - 0.2) / 0.7), 2); // steep: tumbling taps quiet, real hits loud
+      const n = logn(e, 35, 900); // ~p55 -> 0, ~p99.5 -> 1
+      if (n < 0.06) return; // soft contacts stay silent
+      const g = Math.pow(n, 1.6); // p90 ≈ 0.35, p99 ≈ 0.85
       switch (p.kind) {
-        case 'metal': P('metal', 'clang', { gain: g, pan: p.pan, rate: 1.1 - 0.25 * n }); break;
+        case 'metal':
+          // 'metal' = a body against the drum wall: mostly a body thud; the shell only rings on big hits
+          P('thud', 'thud', { gain: g * 0.85, pan: p.pan, rate: 1.15 - 0.35 * n });
+          if (n > 0.55) P('metal', 'clang', { gain: (n - 0.55) * 1.8, pan: p.pan, rate: 1.05 - 0.25 * n });
+          break;
         case 'glass': P('glass', 'tink', { gain: g, pan: p.pan }); break;
         case 'prop': P('prop', 'knock', { gain: g, pan: p.pan, rate: 1.1 - 0.3 * n }); break;
         case 'flesh':
@@ -154,22 +157,23 @@ export function makeHandlers(eng) {
       }
     },
     'blood:spurt'(p) {
-      const n = A.rate.norm(p.rate);
-      P('spurt', 'spurt', { gain: 0.35 + 0.65 * n, pan: p.pan });
+      const n = sat(p.rate, 0.6);
+      P('spurt', 'spurt', { gain: 0.25 + 0.75 * n, pan: p.pan });
     },
     'blood:splat'(p) {
-      const n = A.size.norm(p.size);
+      const n = clamp01(pos(p.size)); // already 0..1 from the sim
       eng.patter += 0.3 + n;
       if (n > 0.75) P('splat', 'splatBig', { gain: 0.4 + 0.5 * n, pan: p.pan });
       else P('splat', 'splat', { gain: 0.15 + 0.85 * Math.pow(n, 1.5), pan: p.pan, rate: 1.15 - 0.3 * n });
     },
     splash(p) {
-      const n = A.splash.norm(p.size);
-      P('splash', 'splash', { gain: 0.4 + 0.6 * n, pan: p.pan, rate: 1.2 - 0.4 * n });
+      const n = clamp01(pos(p.size)); // 0..1 from the sim, ~15/s while bodies churn in the pool
+      if (n < 0.15) return;
+      P('splash', 'splash', { gain: 0.12 + 0.88 * n * n, pan: p.pan, rate: 1.2 - 0.4 * n });
     },
     'hazard:contact'(p) {
-      const n = A.intensity.norm(p.intensity);
-      const g = 0.5 + 0.5 * n;
+      const n = clamp01((pos(p.intensity) - 0.3) / 0.7); // sim: 0.35..1
+      const g = 0.45 + 0.55 * n;
       switch (p.hazard) {
         case 'saw':
           if (eng.loops) { eng.loops.sawSeen = true; eng.loops.sawBoost = 1; }
@@ -180,12 +184,35 @@ export function makeHandlers(eng) {
           if (eng.loops) eng.loops.grinderSeen = true;
           P('hazard', 'grindCrunch', { gain: g, pan: p.pan });
           break;
-        case 'crusher':
-          P('hazard', 'crushHit', { gain: g, pan: p.pan });
-          eng.duckMusic(0.3);
+        case 'crusher': {
+          // one stroke reports every donor it catches (~8 contacts): one big hit, then wet detail
+          const t = now();
+          if (t - crushT > 0.35) {
+            crushT = t;
+            P('hazard', 'crushHit', { gain: g, pan: p.pan });
+            eng.duckMusic(0.3);
+          } else {
+            P('squelch', 'squelch', { gain: 0.35 + 0.3 * n, pan: p.pan, rate: 0.85 });
+            if ((p.pressed | 0) >= 2) P('bone', 'crack', { gain: 0.45, pan: p.pan, rate: 0.85 });
+          }
           break;
+        }
         default: P('hazard', 'shunk', { gain: g * 0.7, pan: p.pan });
       }
+    },
+    // CONTENT extensions: every crusher stroke (even empty) is a hydraulic thump; a part going into
+    // the grinder rollers is a wet crunch sized by the litres it carries
+    'crusher:stroke'(p) {
+      P('machine', 'slam', { gain: 0.28, pan: p.pan, rate: 1.35 });
+    },
+    'grinder:swallow'(p) {
+      const t = now();
+      const n = sat(p.liters, 0.12);
+      if (eng.loops) eng.loops.grinderSeen = true;
+      if (t - swallowT < 0.12) { P('squelch', 'squelch', { gain: 0.25 + 0.35 * n, pan: p.pan, rate: 0.8 }); return; }
+      swallowT = t;
+      P('hazard', 'grindCrunch', { gain: 0.45 + 0.4 * n, pan: p.pan, rate: 0.9 });
+      P('squelch', 'squelch', { gain: 0.3 + 0.5 * n, pan: p.pan, rate: 0.75 });
     },
     'hazard:telegraph'(p) {
       if (p.hazard === 'crusher' || !p.hazard) P('machine', 'crusherTelegraph', { gain: 1, pan: p.pan });
@@ -270,7 +297,7 @@ export function makeHandlers(eng) {
 export const EVENT_NAMES = [
   'shift:start', 'shift:end', 'wave:incoming', 'hatch:open', 'donor:spawn', 'donor:hurt', 'donor:death',
   'limb:sever', 'limb:break', 'impact', 'blood:spurt', 'blood:splat', 'splash', 'hazard:contact',
-  'hazard:telegraph', 'grinder:clog', 'grinder:clear', 'slam', 'slam:ready', 'combo', 'bonus', 'fine',
+  'hazard:telegraph', 'crusher:stroke', 'grinder:swallow', 'grinder:clog', 'grinder:clear', 'slam', 'slam:ready', 'combo', 'bonus', 'fine',
   'prop:puncture', 'prop:explode', 'sphere:crack', 'sphere:shatter', 'pa:announce', 'timer:warning',
   'game:pause', 'ui:hover', 'ui:click', 'ui:back', 'ui:star', 'achievement',
 ];

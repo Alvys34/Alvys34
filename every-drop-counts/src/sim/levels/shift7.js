@@ -7,7 +7,8 @@
  * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
  * Layout: overhead, a rail saw sweeps the middle of the far face. A press hangs from the far face at
  * the left end and slams down onto the landing face on a fixed beat (light + hiss first): line the
- * crowd up under it in time — or bring them up to the rail saw. Thin-Bloods drain completely from
+ * crowd up under it in time — or bring them up to the rail saw. (A side-wall press was tried: mindless
+ * rocking farmed it.) Thin-Bloods drain completely from
  * any wound: quantity over care.
  */
 export default {
@@ -18,7 +19,7 @@ export default {
   lesson: 'Rhythm: line the crowd up under the press, time the rail saw.',
   duration: 140,
   capacity: 165,
-  quota: [55, 140, 185],
+  quota: [55, 145, 185],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

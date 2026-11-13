@@ -156,6 +156,12 @@ Payload details added by CONTENT:
 * `hazard:contact { hazard: 'saw'|'spike'|'grinder'|'crusher', intensity, pressed? }` — rail saws
   report `hazard: 'saw'`; crusher presses report `pressed` (donors caught by this stroke so far).
 * `hazard:telegraph { hazard: 'crusher' }` — ~1.1 s before the stroke (light + hiss).
+* `pa:announce { text, mood, hint: true, hintId: 'pinned'|'noBlood' }` — one-off teaching hints
+  (level.hints, shifts 1–2): at most once per shift, never after the player has scored a kill.
+  UI may style them differently / suppress repeats across sessions by `hintId`.
+* `inspector:exit { id }` (extension) — a visiting Inspector (level.inspectorVisit, shift 8) left
+  intact after his visit: `bonus { 20, 'compliance' }` is paid at that moment; his parts and sphere
+  are removed (`donor.left = true`, `sphere.view.left = true`).
 * `grinder:clog { heldMass }`, `grinder:clear { bySlam }`.
 * `prop:puncture { cause: 'saw'|'spike'|'grinder'|'crusher'|'impact'|'explosion', prop }`,
   `prop:explode { radius, hits }`.
@@ -202,6 +208,8 @@ hits}]`, `aliveTargets` (alive donors that are product, i.e. not Inspectors), `o
 dissolved }`. `donorsLeft` excludes Inspectors.
 
 Levels (`listLevels()`): `{ id, number, name, subtitle, lesson, quota, duration, variant }`.
+Level fields added in balance round 2: `hints` (see above), `inspectorVisit` (s; Inspectors leave
+after this long if their sphere is intact). Donors: `visitLeft` (s) while visiting.
 Shift 8 has `variant: 'staff'` (donor outfits) and `ending`.
 
 ## Donor scale

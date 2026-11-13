@@ -52,6 +52,14 @@ export function createAudio(opts = {}) {
 
     update(dt, state) { guard('update', () => { if (eng) eng.update(dt, state); }); },
 
+    /**
+     * Non-contract: finish the sound-bank pre-render now (bounded by maxMs). The UI calls it when a
+     * shift starts so no synthesis can land inside gameplay. Returns the number of renders left.
+     */
+    warmup(maxMs = 2000) {
+      return guard('warmup', () => (eng && eng.ready && eng.bank ? eng.bank.warm(maxMs) : 0)) || 0;
+    },
+
     setVolume(kind, v) { guard('setVolume', () => { if (eng) eng.setVolume(kind, v); }); },
 
     suspend() {

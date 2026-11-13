@@ -16,6 +16,8 @@
  * brief desaturate-except-blood; slow-mo kill streaks (same rule as src/core/feel.js) = desaturate
  * + radial blur for the slow-mo duration; big combos (x4+) = radial blur pulse.
  * "Blood" pixels are detected with bloodUniforms.uBloodKey, so the green blood setting keeps working.
+ * settings.reduceFlashing (view.setReduceFlashing) removes the flash / red edge / CA / desaturate
+ * snaps; pause, slow-mo and hit-stop come from the loop's real state when main passes `frame`.
  */
 import { bloodUniforms } from './blood/palette.js';
 import { TUNABLES } from '../core/tunables.js';
@@ -211,6 +213,7 @@ export function createPost(ctx) {
   const offs = [
     bus.on('slam', () => { flash = 1; }),
     bus.on('prop:explode', () => { flash = Math.max(flash, 0.8); radial = Math.max(radial, 0.8); }),
+    // the two rules below mirror src/core/feel.js; they only matter when no `frame` is passed
     bus.on('limb:sever', (p) => {
       if (p.t === severT) severN++; else { severT = p.t; severN = 1; }
       if (severN === F.hitStopMinEvents) hit = 1;
@@ -231,18 +234,30 @@ export function createPost(ctx) {
   let lastNow = 0; let time = 0; let fill = 0;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-  function render(dt, state) {
+  /**
+   * frame (optional, from main.js via view.update): { realDt, timeScale, paused, slowMo, hitStop } —
+   * the loop's REAL time state. When given it replaces the event-inferred pause / slow-mo / hit-stop.
+   */
+  function render(dt, state, frame) {
     const now = nowMs();
     let real = lastNow ? (now - lastNow) / 1000 : 0;
     lastNow = now;
     if (!(real > 0) || real > 0.1) real = 1 / 60;
+    if (frame) {
+      paused = !!frame.paused;
+      if (frame.hitStop && !hit && !paused) hit = 1;
+      slowLeft = frame.slowMo && !paused ? Math.max(slowLeft, 0.05) : Math.min(slowLeft, 0);
+    }
     if (paused) real = 0;
     time += real;
     if (state && state.pool) fill += ((state.pool.fill || 0) - fill) * Math.min(1, real * 3);
+    // reduce-flashing (settings.reduceFlashing, live): no exposure pops, red edges, CA spikes or
+    // desaturate snaps; slow-mo keeps a gentle, slow grade change only
+    const calm = !!ctx.settings.reduceFlashing;
     flash = Math.max(0, flash - real / 0.28);
     hit = Math.max(0, hit - real / 0.2);
     radial = Math.max(0, radial - real / 0.45);
-    if (slowLeft > 0) { slowLeft -= real; slow = Math.min(1, slow + real / 0.08); } else slow = Math.max(0, slow - real / 0.25);
+    if (slowLeft > 0) { slowLeft -= real; slow = Math.min(1, slow + real / (calm ? 0.4 : 0.08)); } else slow = Math.max(0, slow - real / (calm ? 0.6 : 0.25));
 
     if (lost) return;
     if (!FLOAT_OK) { renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
@@ -273,14 +288,15 @@ export function createPost(ctx) {
     U.uBloom.value = useBloom ? 0.32 + 0.12 * f : 0;
     U.uTime.value = time;
     U.uFill.value = f;
-    U.uVignette.value = 0.2 + 0.22 * f + 0.1 * flash + 0.12 * slow;
-    U.uCA.value = q.ca ? 0.002 * f * f + 0.003 * flash + 0.002 * radial : 0;
+    const fl = calm ? 0 : flash; const hs = calm ? 0 : hit; const rd = calm ? 0 : radial;
+    U.uVignette.value = 0.2 + 0.22 * f + 0.1 * fl + 0.12 * slow;
+    U.uCA.value = q.ca ? 0.002 * f * f + 0.003 * fl + 0.002 * rd : 0;
     U.uGrain.value = q.grain === false ? 0 : 0.01 + 0.018 * f;
-    U.uFlash.value = flash;
-    U.uRedEdge.value = 0.55 * flash * flash;
-    U.uDesat.value = Math.min(1, 0.85 * slow + 0.7 * hit);
-    U.uRadial.value = q.bloom > 0 || q.radial ? Math.max(radial, slow * 0.5) : 0;
-    U.uExposure.value = 1 + 0.14 * flash * flash + 0.08 * hit;
+    U.uFlash.value = fl;
+    U.uRedEdge.value = 0.55 * fl * fl;
+    U.uDesat.value = Math.min(1, (calm ? 0.4 : 0.85) * slow + 0.7 * hs);
+    U.uRadial.value = q.bloom > 0 || q.radial ? Math.max(rd, slow * (calm ? 0 : 0.5)) : 0;
+    U.uExposure.value = 1 + 0.14 * fl * fl + 0.08 * hs;
     pass(composite, null);
   }
 

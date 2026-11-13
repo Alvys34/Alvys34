@@ -205,12 +205,33 @@ export class Engine {
     this.voices.sweep(now);
     this.music.sweep(now);
 
-    // background bank warm-up (bounded per frame)
-    if (this.bank.queue.length) this.bank.warm(this.offline ? 1000 : 1.5);
+    // background bank warm-up. Outside gameplay (boot splash press -> title -> briefing) it runs in
+    // its own macrotasks, ~8 ms at a time between frames, so the whole bank (~1-1.4 s of CPU) is
+    // done while the player is still in the menus; during play only a 1.5 ms per-frame trickle.
+    if (this.bank.queue.length) {
+      if (this.offline) this.bank.warm(1000);
+      else if (playing) this.bank.warm(1.5);
+      else this.startIdleWarm();
+    }
 
     const ms = nowMs() - t0;
     const T = this.timing;
     T.updates++; T.updateMs += ms; if (ms > T.updateMaxMs) T.updateMaxMs = ms;
+  }
+
+  startIdleWarm() {
+    if (this.idleWarm || typeof setTimeout !== 'function') return;
+    this.idleWarm = true;
+    const step = () => {
+      this.idleWarm = false;
+      if (!this.ready || !this.bank || !this.bank.queue.length || this.screen === 'playing') return;
+      if (this.warmStartMs == null) this.warmStartMs = nowMs();
+      try { this.bank.warm(8); } catch (e) { this.fail('warm', e); this.bank.queue.length = 0; }
+      if (!this.bank.queue.length) { this.warmDoneMs = nowMs(); return; }
+      this.idleWarm = true;
+      setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
   }
 
   setVolume(kind, v) {
@@ -245,6 +266,7 @@ export class Engine {
       bankQueue: this.bank ? this.bank.queue.length : 0,
       bankRenderMs: this.bank ? this.bank.renderMs : 0,
       bankMaxRenderMs: this.bank ? this.bank.maxRenderMs : 0,
+      bankWarmWallMs: this.warmDoneMs != null && this.warmStartMs != null ? this.warmDoneMs - this.warmStartMs : null,
       timing: { ...this.timing },
       errors: this.errors,
       errorLog: this.errorLog.slice(),

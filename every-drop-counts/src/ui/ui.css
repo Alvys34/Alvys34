@@ -500,6 +500,27 @@ body[data-mode='ending'] .toasts { display: none; }
 @media (max-aspect-ratio: 3/2) {
   .pa { max-width: min(30rem, 36vw); }
 }
+/* 16:9 / 16:10: the drum fills the width, so the top-corner plates sit over its corners. Compact
+   plates (the camera also reserves a small top band while a corner would be under one, camera.js). */
+@media (max-aspect-ratio: 2/1) {
+  .plate { padding: 0.5rem 0.8rem 0.5rem; border-radius: 0.85rem; }
+  .tank-plate { width: 12.5rem; }
+  .liters-n { font-size: 2.05rem; }
+  .liters-u { font-size: 1rem; }
+  .gauge { height: 2.75rem; margin-top: 0.05rem; }
+  .gauge-track { top: 1.25rem; height: 0.6rem; }
+  .mark::after { top: 1.15rem; height: 0.8rem; }
+  .mark-drop { width: 1.05rem; height: 1.05rem; }
+  .mark-v { font-size: 0.72rem; }
+  .gauge-next { display: none; }
+  .clock-plate { min-width: 9.5rem; }
+  .clock { font-size: 2.05rem; }
+  .clock-plate.urgent .clock { font-size: 2.35rem; }
+  .clock-meta { gap: 0.6rem; margin-top: 0.2rem; font-size: 0.82rem; }
+  .feed { top: calc(var(--safe) + 7.4rem); width: 12.5rem; }
+  .combo { top: calc(var(--safe) + 7.2rem); }
+  body[data-mode='playing'] .toasts { top: calc(var(--safe) + 15.4rem); }
+}
 @media (max-height: 760px) {
   .game-title { font-size: 3rem; margin: 0.9rem 0 0.9rem; }
   .row { margin-bottom: 0.4rem; padding-top: 0.42rem; padding-bottom: 0.42rem; }

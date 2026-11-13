@@ -39,7 +39,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
   wrap.className = 'edc-ui';
   root.appendChild(wrap);
   const veil = document.createElement('div'); veil.className = 'veil'; wrap.appendChild(veil);
-  const hud = createHud({ root: wrap, bus, getSettings: () => getSave().settings });
+  const hud = createHud({ root: wrap, bus, getSettings: () => getSave().settings, onInsets: (ins) => { try { if (view && view.setHudInsets) view.setHudInsets(ins); } catch (e) { console.warn(e); } } });
   const bubbles = createBubbles({ root: wrap, view, canvas });
   const layer = document.createElement('div'); layer.className = 'screens'; wrap.appendChild(layer);
   const toasts = document.createElement('div'); toasts.className = 'toasts'; toasts.setAttribute('role', 'status'); wrap.appendChild(toasts);
@@ -105,7 +105,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     quitToMenu() { commitStats(); run = null; toTitle(); },
     applySetting: (k) => { systems.apply(k); if (k === 'speechBubbles') bubbles.setVisible(getSave().settings.speechBubbles); },
     setFullscreen: (v) => systems.setFullscreen(v),
-    resetProgress() { resetSave({ keepSettings: true }); },
+    resetProgress() { resetSave({ keepSettings: true }); systems.reloadAchievements(); },
     toast,
     nextShift() { const nx = run && !run.overtime ? nextLevel(run.level.id) : null; if (nx) { lastShiftNum = nx.number; prepare(nx.number); } else toShiftSelect(); },
     retry() { if (run) startRun(run.ref); },
@@ -227,6 +227,10 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     bubbles.setLimits({ max: 3, gap: 0.9, life: 2.8 });
     hud.setVisible(true);
     unlockAudio();
+    // the sound bank pre-renders in the menus; if the player got here faster, finish it now (before
+    // the first sim step) instead of synthesising during the opening seconds of the shift
+    safeAudio((a) => { if (typeof a.warmup === 'function') a.warmup(2500); });
+    loop.resetAccumulator();
     return sim.snapshot();
   }
 
@@ -340,6 +344,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     const c = canvas;
     c.classList.remove('drop-cam');
     c.style.removeProperty('--drop-t');
+    try { if (view && typeof view.stopEnding === 'function') view.stopEnding(); } catch (e) { console.warn(e); }
     run = null;
     toTitle();
     screens.credits.refresh();
@@ -350,7 +355,8 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     bus.emit('ending:start', {});
     const rig = view && view.ctx && view.ctx.cameraRig;
     const hook = (view && view.playEnding) || (rig && (rig.playEnding || rig.ending));
-    if (typeof hook === 'function') { try { hook.call(view.playEnding ? view : rig); return; } catch (e) { console.warn(e); } }
+    // the hook returns false when it cannot run (e.g. the shift has not ended): CSS fallback then
+    if (typeof hook === 'function') { try { if (hook.call(view.playEnding ? view : rig) !== false) return; } catch (e) { console.warn(e); } }
     canvas.classList.add('drop-cam');
   }
 

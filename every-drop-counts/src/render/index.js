@@ -2,8 +2,11 @@
  * Baseline three.js renderer — a thin orchestrator over swappable pieces (see src/render/README.md).
  *
  *   const view = createRenderer({ canvas, bus, settings });
- *   view.update(simState, alpha, frameDt);   // every render frame (alpha = interpolation 0..1)
+ *   view.update(simState, alpha, frameDt, frame?);   // every render frame (alpha = interpolation 0..1)
+ *        frame = { realDt, timeScale, paused, slowMo, hitStop } (the loop's real time state, optional)
  *   view.resize(); view.setQuality('low'|'medium'|'high'); view.info(); view.dispose();
+ *   view.setReduceFlashing(bool); view.setHudInsets({ top, left, right } | null);
+ *   view.playEnding() / view.stopEnding()   (shift-8 ending camera, see camera.js)
  *
  * Scene graph:
  *   scene
@@ -113,13 +116,13 @@ export function createRenderer({ canvas, bus, settings = {} }) {
   }
   let lastFrameAt = 0;
 
-  function update(state, alpha = 1, dt = 1 / 60) {
+  function update(state, alpha = 1, dt = 1 / 60, frame = null) {
     renderer.info.reset();
     const now = performance.now();
     if (lastFrameAt) governor.frame((now - lastFrameAt) / 1000);
     lastFrameAt = now;
-    if (!state) { post.render(dt, null); return; }
-    lastState = state;
+    if (!state) { post.render(dt, null, frame); return; }
+    lastState = state; ctx.lastState = state;
     if (state.level !== lastLevel) {
       lastLevel = state.level;
       for (const p of pieces) if (p.onLevel) p.onLevel(state);
@@ -131,7 +134,7 @@ export function createRenderer({ canvas, bus, settings = {} }) {
     const jolt = (d.prevJolt + (d.jolt - d.prevJolt) * alpha);
     drumGroup.position.y = Math.sin(jolt * Math.PI) * (state.T ? state.T.slam.jolt : 0.3) * jolt;
     for (const p of pieces) p.update(dt, state, alpha);
-    post.render(dt, state);
+    post.render(dt, state, frame);
   }
 
   resize();
@@ -150,6 +153,20 @@ export function createRenderer({ canvas, bus, settings = {} }) {
     get bloodColor() { return getBloodColor(); },
     /** screen shake 0..1 (booleans accepted); scales sway, shake, kicks and zoom punch */
     setScreenShake(v) { settings.screenShake = v; },
+    /** photosensitivity: no slam flash / red edges / CA / desaturate snaps, no light strobing (live) */
+    setReduceFlashing(on) { settings.reduceFlashing = !!on; return settings.reduceFlashing; },
+    /**
+     * HUD plates in the top corners, as fractions of the viewport: { top, left, right } (plate
+     * bottom edge / left plate width / right plate width), or null while the HUD is hidden.
+     * The camera reserves a top band when a drum corner would sit under a plate.
+     */
+    setHudInsets(ins) {
+      const v = ins && ins.top > 0 ? { top: Math.min(0.4, +ins.top || 0), left: Math.min(0.5, +ins.left || 0), right: Math.min(0.5, +ins.right || 0) } : null;
+      settings.hudInsets = v;
+    },
+    /** shift-8 ending: camera drifts into the intake hatch. Only after the shift has ended. */
+    playEnding() { return ctx.cameraRig.playEnding(); },
+    stopEnding() { ctx.cameraRig.stopEnding(); },
     /** automatic quality degradation on/off (on by default outside ?debug=1) */
     setAutoQuality(on) { governor.enabled = on; if (!on) { ctx.loadScale = 1; ctx.pixelScale = 1; applyPreset(ctx.qualityName); } },
     /** perf/quality report for the game / debug HUD */

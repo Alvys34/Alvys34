@@ -70,22 +70,48 @@ async function boot() {
     a.setVolume('sfx', save.settings.sfx);
   });
   // ---- APP FLOW (owner: UI — src/ui/index.js holds the state machine, menus, HUD, results) ----
+  // per-frame main-thread cost split (ms, summed until __edc.perfReset()): sim / view / ui / audio
+  const perf = { frames: 0, steps: 0, sim: 0, view: 0, ui: 0, audio: 0, maxFrame: 0 };
+  const now = () => performance.now();
   const loop = createLoop({
     dt: TUNABLES.sim.dt,
     maxStepsPerFrame: TUNABLES.sim.maxStepsPerFrame,
-    step: () => sim.step(),
-    onFrameStart: (realDt) => ui.frame(realDt),
+    step: () => { const t0 = now(); sim.step(); perf.sim += now() - t0; perf.steps++; },
+    onFrameStart: (realDt) => { const t0 = now(); ui.frame(realDt); perf.ui += now() - t0; },
     render,
   });
   const ui = createUI({ root: uiRoot, bus, simBus, sim, view, loop, input, audio: safeAudio, canvas, params, debug: DEBUG });
   createFeel({ bus, loop, T: TUNABLES });
 
+  // which loop machinery this level has (idle saw whine / grinder hum from shift start)
+  let hazLevel = null; const haz = { hasSaw: false, hasGrinder: false };
+  function hazardPresence() {
+    const st = sim.state;
+    if (st && st.level !== hazLevel) {
+      hazLevel = st.level;
+      const hs = (st.hazards || []).map((h) => h && (h.type || (h.view && h.view.kind)));
+      haz.hasSaw = hs.some((t) => t === 'saw' || t === 'railSaw');
+      haz.hasGrinder = hs.includes('grinder');
+    }
+    return haz;
+  }
+  const frameInfo = { realDt: 0, timeScale: 1, paused: false, slowMo: false, hitStop: false };
   function render(alpha, realDt, simDt) {
     const scale = loop.timeScale;
-    view.update(sim.state, alpha, simDt);
+    const t0 = now();
+    frameInfo.realDt = realDt; frameInfo.timeScale = scale; frameInfo.paused = loop.paused;
+    frameInfo.slowMo = loop.slowMoActive; frameInfo.hitStop = loop.hitStopActive;
+    view.update(sim.state, alpha, simDt, frameInfo);
+    const t1 = now();
     ui.update(realDt);
+    const t2 = now();
     const a = ui.audioState(sim.audioState());
-    safeAudio((au) => au.update(realDt, { screen: ui.audioScreen, fill: a.fill, drumOmega: a.drumOmega, aliveCount: a.aliveCount, sawLoad: a.sawLoad, grinderLoad: a.grinderLoad, timeScale: scale, intensity: a.intensity }));
+    const screen = ui.audioScreen;
+    const hz = screen === 'playing' ? hazardPresence() : null;
+    safeAudio((au) => au.update(realDt, { screen, fill: a.fill, drumOmega: a.drumOmega, aliveCount: a.aliveCount, sawLoad: a.sawLoad, grinderLoad: a.grinderLoad, timeScale: scale, intensity: a.intensity, hasSaw: !!(hz && hz.hasSaw), hasGrinder: !!(hz && hz.hasGrinder) }));
+    const t3 = now();
+    perf.frames++; perf.view += t1 - t0; perf.ui += t2 - t1; perf.audio += t3 - t2;
+    if (t3 - t0 > perf.maxFrame) perf.maxFrame = t3 - t0;
   }
 
   window.addEventListener('resize', () => view.resize());
@@ -117,6 +143,8 @@ async function boot() {
       // step(n) advances n fixed steps then renders once; step(n, false) skips the render (fast tooling)
       step: (n = 1, render = true) => { loop.stepNow(n, render); return window.__edc.getState(); },
       setTimeScale: (x) => loop.setTimeScale(x),
+      perf: () => ({ ...perf }),
+      perfReset: () => { for (const k of Object.keys(perf)) perf[k] = 0; },
       setQuality: (name) => view.setQuality(name),
       pause: (p = true) => ui.setPaused(p),
     });

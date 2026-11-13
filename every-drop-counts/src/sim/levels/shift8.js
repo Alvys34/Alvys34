@@ -23,7 +23,7 @@ export default {
   ending: { pa: 'Operator, please proceed to the intake chute. Thank you for donating.', mood: 'calm', next: 'credits' },
   duration: 140,
   capacity: 150,
-  quota: [55, 120, 150],
+  quota: [55, 125, 150],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   // Inspectors only VISIT: keep the sphere intact for 16 s and he leaves with the +20 L bonus.

@@ -158,6 +158,12 @@ export function createSystems({ bus, view, audio, loop, root, debug = false, loc
       console.warn('[edc] achievements unavailable', e);
     }
   }
+  /** After a progress reset: drop the in-memory tracker (unlock set, best stars) and start a fresh one. */
+  function reloadAchievements() {
+    if (tracker && typeof tracker.dispose === 'function') { try { tracker.dispose(); } catch { /* ignore */ } }
+    tracker = null;
+    loadAchievements();
+  }
   function normalizeDefs(raw) {
     const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.entries(raw).map(([id, d]) => ({ id, ...(d || {}) })) : []);
     return arr.filter((d) => d && d.id).map((d) => ({
@@ -186,11 +192,11 @@ export function createSystems({ bus, view, audio, loop, root, debug = false, loc
   return {
     apply, applyAll, onFirstGesture, setFullscreen, isFullscreen, tickQuality,
     get autoQualityLevel() { return autoQuality ? autoLevel : null; },
-    loadAchievements, syncSteam,
+    loadAchievements, reloadAchievements, syncSteam,
     get achievements() { return defs; },
     get tracker() { return tracker; },
     defFor,
     onAchievement(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    dispose() { offAch(); document.removeEventListener('fullscreenchange', onFsChange); },
+    dispose() { offAch(); if (tracker && tracker.dispose) tracker.dispose(); document.removeEventListener('fullscreenchange', onFsChange); },
   };
 }

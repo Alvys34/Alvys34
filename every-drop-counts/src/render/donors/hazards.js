@@ -427,7 +427,7 @@ function buildGrinder(ctx, view, kit) {
       wob = v.clogged ? Math.sin(t * 40) * 0.03 : 0;
       rollers[0].rotation.z = a + wob;
       rollers[1].rotation.z = -a - wob;
-      if (v.clogged) { lampMat.emissive.copy(amber); lampMat.emissiveIntensity = Math.sin(t * 12) > 0 ? 2.4 : 0.2; }
+      if (v.clogged) { lampMat.emissive.copy(amber); lampMat.emissiveIntensity = ctx.settings && ctx.settings.reduceFlashing ? 1.3 + 0.9 * Math.sin(t * 4) : Math.sin(t * 12) > 0 ? 2.4 : 0.2; }
       else if (v.chewing || (v.held || 0) > 0) { lampMat.emissive.copy(mint); lampMat.emissiveIntensity = 1.4; }
       else { lampMat.emissive.copy(mint); lampMat.emissiveIntensity = 0.35; }
     },
@@ -508,7 +508,8 @@ function buildCrusher(ctx, view, kit) {
       }
       const warn = v.warn || 0;
       const telegraph = v.state === 'telegraph';
-      const blink = telegraph ? (Math.sin(t * (8 + warn * 26)) > 0 ? 1 : 0.15) : 0;
+      // reduce flashing: a slow smooth pulse instead of the accelerating hard blink
+      const blink = !telegraph ? 0 : ctx.settings && ctx.settings.reduceFlashing ? 0.55 + 0.45 * Math.sin(t * 5) : (Math.sin(t * (8 + warn * 26)) > 0 ? 1 : 0.15);
       lampMat.emissiveIntensity = telegraph ? 0.4 + 2.6 * blink : (v.state === 'extend' || v.state === 'hold' ? 2.2 : 0.15);
       glowMat.opacity = telegraph ? 0.25 * blink * (0.4 + warn) : 0;
     },

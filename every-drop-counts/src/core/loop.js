@@ -89,6 +89,9 @@ export function createLoop({ dt = 1 / 60, maxStepsPerFrame = 5, step, render, on
     get timeScale() { return effectiveScale(); },
     get baseTimeScale() { return baseScale; },
     get paused() { return paused; },
+    /** true while a slow-mo (loop.slowMo) / hit-stop (loop.hitStop) is running (for VFX/audio) */
+    get slowMoActive() { return slowLeft > 0 && slowScale < 1; },
+    get hitStopActive() { return hitStopLeft > 0; },
     start() {
       if (running) return;
       running = true;
@@ -100,7 +103,9 @@ export function createLoop({ dt = 1 / 60, maxStepsPerFrame = 5, step, render, on
     setPaused(p) { paused = !!p; if (paused) acc = 0; },
     slowMo(scale, seconds) { slowScale = scale; slowLeft = seconds; },
     hitStop(frames) { hitStopLeft = Math.max(hitStopLeft, frames / 60); },
-    resetAccumulator() { acc = 0; },
+    /** drop accumulated sim time; also restarts the frame clock so a long blocking call made just
+     *  before (level load, audio warm-up) is not replayed as catch-up steps on the next frame */
+    resetAccumulator() { acc = 0; if (running) last = now(); },
     /** Advance n fixed steps synchronously, then render once unless doRender === false (debug harness). */
     stepNow(n = 1, doRender = true) {
       for (let i = 0; i < n; i++) doStep();

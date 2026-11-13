@@ -103,6 +103,9 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
         if (e > 0.25 && hash(t + 3.1) < 0.35 + e * 0.5) flick = 0.12 + hash(t + 7.7) * 0.35;
       }
       flick = Math.max(0, flick - dt);
+      // settings.reduceFlashing: no strobing dips / tube stutter (lights fail by dimming instead)
+      const calm = !!(ctx.settings && ctx.settings.reduceFlashing);
+      if (calm) flick = 0;
       const dip = flick > 0 && hash(Math.floor(t * 24)) < 0.6 ? 0.55 : 1;
 
       key.color.copy(C.keyCalm).lerp(C.keyRed, e * 0.85);
@@ -132,7 +135,8 @@ export function createLighting(ctx, { tubes = [], beacon = null } = {}) {
         // tubes fail one by one as the tank fills; failing ones stutter
         const fail = smooth(tb.failAt ?? 0.5, (tb.failAt ?? 0.5) + 0.2, f);
         let on = 1;
-        if (fail > 0) {
+        if (fail > 0 && calm) on = 1 - 0.92 * fail;
+        else if (fail > 0) {
           const k = Math.floor(t * (9 + i * 3) + tb.phase * 10);
           on = hash(k + i * 17) < 0.5 + 0.45 * (1 - fail) ? 1 : 0.08;
           if (flick > 0) on *= 0.3;
