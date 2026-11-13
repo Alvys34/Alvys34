@@ -15,14 +15,14 @@ export default {
   subtitle: 'Mind the edges.',
   lesson: 'SLAM throws donors into whatever is above them.',
   duration: 125,
-  capacity: 130,
-  quota: [30, 80, 105],
+  capacity: 105,
+  quota: [24, 70, 105],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
     { type: 'spikes', wall: 'floor', from: -1.3, to: 1.3, z: [-2.5, 2.5] },
-    { type: 'saw', wall: 'floor', at: -3.3, z: [-2.5, 0.4], radius: 1.05, dir: 1 },
-    { type: 'saw', wall: 'floor', at: 3.3, z: [-0.4, 2.5], radius: 1.05, dir: -1 },
+    { type: 'saw', wall: 'floor', at: -2.6, z: [-2.5, 0.2], radius: 0.95, dir: 1 },
+    { type: 'saw', wall: 'floor', at: 2.6, z: [-0.2, 2.5], radius: 0.95, dir: -1 },
   ],
   waves: [
     { at: 1.5, count: 5 },
@@ -31,6 +31,9 @@ export default {
     { at: 90, count: 6 },
   ],
   advanceWhenClear: true,
+  hints: {
+    pinned: { text: 'Operator reminder: donors pinned to the wall are not donating. Ease off the throttle.' },
+  },
   pa: [
     { at: 0.2, text: 'Shift two. New equipment has been installed for your convenience.', mood: 'calm' },
     { at: 5, text: 'Press SPACE to SLAM. Donors appreciate a firm hand.', mood: 'calm' },

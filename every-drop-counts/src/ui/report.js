@@ -84,7 +84,7 @@ export function createReports(app) {
       e.querySelector('.headline').textContent = head;
       e.querySelector('.headline').dataset.state = r.stars > 0 ? 'ok' : 'miss';
       const quota = (lv && lv.quota) || [1, 2, 3];
-      const max = Math.max(quota[2] * 1.12, r.liters * 1.02, 1);
+      const max = Math.max(quota[2] * 1.12, 1); // fixed scale: thresholds keep their places, a big total just fills the bar
       e.querySelector('.r-marks').innerHTML = quota.map((q, i) => `<div class="r-mark" data-i="${i}" style="left:${(q / max) * 100}%">
         <span class="r-drop">${icon('drop', 'm-full')}${icon('dropOutline', 'm-empty')}</span><span class="num">${Math.round(q)} L</span></div>`).join('');
       e.querySelector('.breakdown').innerHTML = `

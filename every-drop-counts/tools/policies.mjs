@@ -132,6 +132,18 @@ function smartPolicy(s, t, mem) {
   const inspectors = [...spheres, ...bareInspectors.filter((c) => c && !c.removed)];
   let slam = false;
 
+  // --- visiting Inspectors (level.inspectorVisit): hold the bare landing face down while one is
+  //     aboard or due (the briefing / wave timings say when), then get back to work
+  if (s.level && s.level.inspectorVisit) {
+    const visiting = s.donors.some((dn) => dn.alive && dn.mustSurvive && dn.encased && dn.visitLeft > 0);
+    const tc = s.clock ? s.clock.t : t;
+    const incoming = (s.level.waves || []).some((w) => w.types && !Array.isArray(w.types) && w.types.inspector && w.at - tc < 4 && w.at - tc > -3);
+    if (visiting || incoming) {
+      const r = steer(s, s.level.startAngle || 0, { maxW: 1.6 });
+      return { rotate: r.rotate, brake: r.brake, slam: false };
+    }
+  }
+
   // --- emergencies first
   if (d.slamCooldown <= 0) {
     if (s.donors.some((dn) => dn.alive && !dn.mustSurvive && dn.drownTimer > 2.5)) slam = true; // anti-drown
@@ -271,6 +283,7 @@ function inspectorAlive(s) { return s.donors.some((d) => d.mustSurvive && d.aliv
 
 /** the shift briefing says an Inspector is coming (and one has not been dealt with yet) */
 function inspectorExpected(s) {
+  if (s.level && s.level.inspectorVisit) return false; // handled by the visit hold
   const w = s.level && s.level.waves;
   if (!w || !w.some((x) => x.types && !Array.isArray(x.types) && x.types.inspector)) return false;
   return s.donors.filter((d) => d.mustSurvive).length === 0 || s.donors.some((d) => d.mustSurvive && d.alive);

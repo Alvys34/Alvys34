@@ -1,8 +1,10 @@
 /**
  * Shift 1 — "Orientation". Floor spikes only, 3 small waves. Teaches ROTATE (drop from height).
  * Layout: one spike bed in the MIDDLE of the floor; donors arrive over the bare left end. Sliding
- * them across the bed barely scratches them (spikes need ~10 m/s); you have to lift the crowd
- * (rotate it up a wall / over the top) and let it fall onto the bed.
+ * across the bed barely scratches them (spikes need ~10 m/s); lift the crowd (rotate it up a wall /
+ * over the top) and let it fall onto the bed. The first drop is deliberately generous (tutorial:
+ * any active play — rocking, tumbling, flipping, slamming — clears it); 2–3 drops need aimed drops.
+ * Teaching hints (level.hints): pinned at max speed / no blood after 15 s.
  *
  * LEVEL FORMAT (all levels follow this; coordinates are drum-local metres, drum = 16 x 10 x 5):
  * {
@@ -30,12 +32,16 @@ export default {
   lesson: 'Rotate the drum. Donations from height are more generous.',
   duration: 105,
   capacity: 150,
-  quota: [20, 40, 50],
+  quota: [6, 35, 48],
   startAngle: 0,
   hatch: { wall: 'back', x: -4.6, y: 0.5, offset: 1.2 },
   hazards: [
     { type: 'spikes', wall: 'floor', from: -2.6, to: 3.4, z: [-2.5, 2.5] },
   ],
+  hints: {
+    pinned: { text: 'Operator reminder: donors pinned to the wall are not donating. Ease off the throttle.' },
+    noBlood: { after: 15, text: 'Operator reminder: drop them from height onto the spikes.' },
+  },
   waves: [
     { at: 1.5, count: 4 },
     { at: 32, count: 5 },

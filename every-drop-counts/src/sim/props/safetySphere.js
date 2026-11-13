@@ -65,6 +65,15 @@ export default {
       },
 
       onHazard(c2, info) { hit(c2, info.hazard, info.intensity >= 3 ? 3 : 1); },
+      /** the Inspector's visit is over: the ball (and he) leave the drum intact */
+      leave(c2) {
+        if (inst.removed) return;
+        shattered = true; inst.view.left = true;
+        c2.owners.delete(collider.handle);
+        c2.world.removeRigidBody(body);
+        dyn.removed = true; inst.removed = true; c2.removedThisStep = true;
+        if (donor) { donor.encased = false; donor.sphere = null; for (const p of donor.partList) p.encased = false; }
+      },
       onContact(c2, other, speed) { if (speed > P.impactCrack) hit(c2, 'impact', 1); },
       onExplosion(c2, k, pos, n = 2) { cooldown = 0; hit(c2, 'explosion', n); },
     };

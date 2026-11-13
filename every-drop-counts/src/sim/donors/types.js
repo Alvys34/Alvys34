@@ -15,6 +15,7 @@
 import { HUMANOID, scalePlan } from './humanoid.js';
 import { TUNABLES } from '../../core/tunables.js';
 import { createProp } from '../props/index.js';
+import { removePart } from '../donor.js';
 
 const BG = TUNABLES.donorTypes.bigGiver;
 const TB = TUNABLES.donorTypes.thinBlood;
@@ -71,7 +72,25 @@ export const INSPECTOR = {
     'Who signed off on the saws?', 'My sphere is rated for three impacts.',
   ],
   shatterLines: ['Oh dear.', 'That was my sphere.', 'This is highly irregular.', 'Write that down. No, wait.'],
+  // level.inspectorVisit (s): he only observes this long. If his sphere is still intact when the
+  // visit is over he leaves through the hatch: +20 L compliance bonus right away, event
+  // `inspector:exit { id }`. (Shift 5 has no visit limit: there he stays all shift.)
+  preStep(ctx, donor, dt) {
+    if (!donor.alive || donor.visitLeft == null) return;
+    donor.visitLeft -= dt;
+    if (donor.visitLeft > 0 || !donor.encased || !donor.sphere) return;
+    const pel = donor.parts.pelvis;
+    const pos = [pel.x, pel.y, pel.z];
+    donor.alive = false; donor.left = true; donor.speech = null;
+    donor.sphere.leave(ctx);
+    for (const p of donor.partList) if (!p.removed) removePart(ctx, p, { release: false });
+    ctx.scoring.addBonus(IN.bonus, 'compliance');
+    ctx.scoring.inspectorsSaved = (ctx.scoring.inspectorsSaved || 0) + 1;
+    ctx.emit('inspector:exit', { id: donor.id }, pos);
+    ctx.emit('pa:announce', { text: 'The Inspector has concluded his visit. Compliance noted.', mood: 'calm' });
+  },
   onSpawn(ctx, donor) {
+    if (ctx.level && ctx.level.inspectorVisit) donor.visitLeft = ctx.level.inspectorVisit;
     const pel = donor.parts.pelvis;
     const sphere = createProp(ctx, { type: 'safetySphere', donor, pos: [pel.x, pel.y, pel.z], vel: [pel.body.linvel().x, pel.body.linvel().y, 0] }, ctx.nextPropId++);
     ctx.props.push(sphere);

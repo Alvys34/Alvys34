@@ -461,7 +461,8 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
   // ------------------------------------------------------------------ boot
   function boot({ autostart = null } = {}) {
     systems.applyAll();
-    systems.loadAchievements().then(() => systems.syncSteam());
+    systems.loadAchievements();
+    systems.syncSteam();
     bubbles.setVisible(getSave().settings.speechBubbles);
     refreshGlyphs(wrap, input.lastDevice);
     if (saveInfo.status === 'corrupt') setTimeout(() => toast({ title: 'Save file unreadable', name: 'A fresh record was started.', kind: 'info' }), 600);

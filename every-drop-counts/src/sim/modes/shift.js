@@ -23,6 +23,13 @@ export default {
     const pa = createPaScript(ctx, level.pa || []);
     let nextWave = 0;
     let lastActivity = 0;
+    // one-off teaching hints (level.hints): pa:announce { text, mood, hint: true, hintId }
+    //   pinned:  { text }            drum held near max speed ~3 s with live donors and no kills
+    //   noBlood: { after: s, text }  donors alive, nothing collected after `after` s
+    // Each fires at most once per shift and never once the player has scored a kill.
+    const hints = level.hints || {};
+    const hintDone = {};
+    let pinT = 0;
 
     const mode = {
       id: 'shift',
@@ -70,6 +77,15 @@ export default {
           if (mode.clock.left > 0) c.emit('timer:warning', { secondsLeft: s });
         }
         pa.step(c, t);
+        if (c.scoring.kills > 0) { hintDone.pinned = true; hintDone.noBlood = true; }
+        if (hints.pinned && !hintDone.pinned) {
+          const pinned = Math.abs(c.drum.omega) > 0.85 * T.drum.maxOmega && c.aliveTargets > 0;
+          pinT = pinned ? pinT + dt : 0;
+          if (pinT > (hints.pinned.after || 3)) { hintDone.pinned = true; hint(c, 'pinned'); }
+        }
+        if (hints.noBlood && !hintDone.noBlood && t > hints.noBlood.after && c.aliveTargets > 0 && c.blood.collected < 0.5) {
+          hintDone.noBlood = true; hint(c, 'noBlood');
+        }
       },
 
       postStep(c) {
@@ -117,6 +133,10 @@ export default {
       // shift 8: the ending sting (UI plays it after the results screen; only on a pass)
       mode.result.ending = level.ending && stars >= 1 ? { ...level.ending } : null;
       c.emit('shift:end', { ...mode.result });
+    }
+
+    function hint(c, id) {
+      c.emit('pa:announce', { text: hints[id].text, mood: 'calm', hint: true, hintId: id });
     }
 
     function targetCount(w) {

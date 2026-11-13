@@ -12,6 +12,7 @@
  *   The tracker emits `achievement { id }` on the bus; the UI persists, toasts and forwards to Steam.
  */
 import { getSave, updateSave, unlockAchievement } from '../core/save.js';
+import * as achievementsModule from '../core/achievements.js'; // CONTENT: definitions + tracker
 
 const SHAKE = { off: 0, reduced: 0.4, full: 1 };
 const BLOOD = { red: 0xb3001b, green: 0x3f8f1c };
@@ -136,15 +137,14 @@ export function createSystems({ bus, view, audio, loop, root, debug = false, loc
   document.addEventListener('fullscreenchange', onFsChange);
 
   // ---------------- achievements ----------------
-  const achievementModules = import.meta.glob('../core/achievements.js');
   let defs = [];
   let tracker = null;
   const listeners = new Set();
-  async function loadAchievements() {
-    const loader = achievementModules['../core/achievements.js'];
-    if (!loader) return;
+  /** Synchronous: the tracker must exist before the first shift can end (e.g. ?autostart). */
+  function loadAchievements() {
+    if (tracker) return;
     try {
-      const mod = await loader();
+      const mod = achievementsModule;
       defs = normalizeDefs(mod.ACHIEVEMENTS || mod.achievements || mod.DEFINITIONS || mod.definitions || (mod.default && (mod.default.ACHIEVEMENTS || mod.default.achievements)) || []);
       const factory = mod.createAchievementTracker || mod.createAchievements || mod.createTracker || (typeof mod.default === 'function' ? mod.default : null);
       if (factory) {

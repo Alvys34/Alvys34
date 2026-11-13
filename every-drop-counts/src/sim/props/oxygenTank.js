@@ -59,12 +59,15 @@ export default {
       },
 
       onHazard(c2, info) { puncture(c2, info.hazard, info.intensity >= 3 ? 0.02 : P.rocketTime); },
-      onContact(c2, other, speed) { if (speed > P.punctureImpact) puncture(c2, 'impact', P.rocketTime); },
+      // only a hard hit against the drum / machinery punctures (not bumping other props or donors:
+      // otherwise slam-spamming a pile of tanks sets off free chain reactions)
+      onContact(c2, other, speed) { if ((other.kind === 'wall' || other.kind === 'hazard') && speed > P.punctureImpact) puncture(c2, 'impact', P.rocketTime); },
       onExplosion(c2) { puncture(c2, 'explosion', P.chainFuse); },
     };
     const dyn = makeDyn('prop', body, collider, { mass: P.mass, radius: P.halfLength + P.radius, thick: P.radius, owner: inst });
     dyn.buoyancy = 1.3;
     dyn.dragScale = 0.6;
+    dyn.slamScale = 0.6; // a slam lifts a tank ~2 m: you can't loft them into the machinery blind
     inst.dyns.push(dyn);
     inst.view.dyn = dyn;
     ctx.dyns.push(dyn);

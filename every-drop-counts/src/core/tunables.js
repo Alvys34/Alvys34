@@ -220,7 +220,7 @@ export const TUNABLES = {
     },
     oxygenTank: {
       radius: 0.2, halfLength: 0.5, mass: 16,
-      punctureImpact: 14,      // m/s impact that punctures
+      punctureImpact: 18,      // m/s impact that punctures (> a slam bounce: tanks are not a slam-spam toy)
       rocketTime: 2.0,         // s of thrust before it explodes
       thrust: 34,              // m/s^2 along the tank axis while rocketing
       wobble: 6,               // random torque while rocketing

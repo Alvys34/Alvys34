@@ -42,7 +42,7 @@ reach audio, VFX or the achievement tracker; the UI taps `donor:speak` for speec
 | `report.js` | shift report (drops awarded one by one, `ui:star`), Overtime report + initials, ending sting |
 | `hud.js` | litres + tank gauge, clock, donors/intake, Sponsor Match, SLAM dial, PA ticker, prompts |
 | `bubbles.js` | donor speech bubbles projected from sim head positions |
-| `systems.js` | settings → audio/render hooks (fail soft), fullscreen, achievements (persist, toast, Steam) |
+| `systems.js` | settings → audio/render hooks (fail soft), fullscreen, achievements: creates CONTENT's tracker at boot, persists, toasts, forwards to Steam |
 | `attract.js` | gated sim bus + attract level/driver |
 | `glyphs.js` | keyboard / gamepad button glyphs that follow the last-used device |
 | `icons.js` | custom SVG pictograms + DRAINWELL logo mark |
