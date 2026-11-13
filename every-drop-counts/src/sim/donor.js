@@ -15,10 +15,17 @@
  */
 import { makeDyn } from './physics.js';
 import { releaseBlood } from './blood.js';
-import { shapeRadius, shapeThickness } from './donors/humanoid.js';
+import { shapeRadius, shapeThickness, scalePlan } from './donors/humanoid.js';
 import { getDonorType } from './donors/index.js';
 
 const CUT_KINDS = new Set(['cut', 'grind', 'explode']);
+
+/** body plan of a donor type at the global donor scale (cached per type + scale) */
+function scaledPlanFor(def, S) {
+  if (S === 1) return def.plan;
+  def._scaledPlans = def._scaledPlans || {};
+  return (def._scaledPlans[S] ||= scalePlan(def.plan, S));
+}
 let donorIdCounter = 1;
 export function resetDonorIds() { donorIdCounter = 1; }
 
@@ -61,7 +68,8 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
   const { R, world, T, rng } = ctx;
   const def = getDonorType(typeId);
   const P = T.donor;
-  const plan = def.plan;
+  const S = P.scale ?? 1;
+  const plan = scaledPlanFor(def, S);
   const id = donorIdCounter++;
   const bloodMax = P.blood * def.bloodScale;
   // level-wide outfit override (shift 8 "Staff Appreciation Day": donors wear staff uniforms)
@@ -73,8 +81,9 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
     look: {
       gown: rng.pick(useOutfit && lv.gown ? lv.gown : def.look.gown), skin: rng.pick(def.look.skin),
       accessory: def.look.accessory || null, outfit: (useOutfit && lv.outfit) || def.look.outfit || 'gown',
-      scale: def.scale || 1, seed: rng.int(0, 1e6),
+      scale: (def.scale || 1) * S, seed: rng.int(0, 1e6),
     },
+    plan, sizeScale: S,
     mustSurvive: !!def.mustSurvive,
     speech: null, speakTimer: rng.range(1.0, P.speakInterval[1]), flailTimer: rng.range(...P.flailInterval),
     drownTimer: 0, impaled: 0, gone: false, hurtAcc: 0, hurtTimer: 0, lastCause: null, lastCauseTime: -99,
@@ -100,7 +109,7 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
     // tunnelling, so thin limbs only get soft (predictive) CCD.
     if (shapeThickness(pd.shape) < 0.07) bd.setSoftCcdPrediction(T.sim.softCcd);
     const body = world.createRigidBody(bd);
-    const mass = tune.mass * def.massScale;
+    const mass = tune.mass * def.massScale * S;
     const cd = colliderDesc(R, pd.shape)
       .setMass(mass)
       .setFriction(P.friction)
@@ -184,11 +193,12 @@ export function donorPreStep(ctx, donor, dt) {
   const rng = ctx.rng;
   const hpFrac = chest.hp / chest.hpMax;
   const beh = def.behaviour;
+  const S3 = (donor.sizeScale || 1) ** 3; // torques scale with the bigger bodies' inertia
   if (donor.encased) {
     // inside a safety sphere: bodies are disabled and posed by the sphere prop; only talk
     donor.flailTimer = 1;
   } else if (hpFrac > P.uprightMinHp && !chest.severed && !chest.removed) {
-    const k = P.uprightTorque * (beh.upright ?? 1);
+    const k = P.uprightTorque * (beh.upright ?? 1) * S3;
     for (const part of [chest, pelvis]) {
       if (part.removed || part.impaled) continue;
       // part up axis in drum-local coords
@@ -199,7 +209,7 @@ export function donorPreStep(ctx, donor, dt) {
       // a x u  (u has z = 0)
       const cx = -az * uy; const cy = az * ux; const cz = ax * uy - ay * ux;
       const w = part.body.angvel();
-      const c = P.uprightDamping * (beh.upright ?? 1) * 0.1;
+      const c = P.uprightDamping * (beh.upright ?? 1) * 0.1 * S3;
       part.body.applyTorqueImpulse({
         x: (k * cx - c * w.x) * dt, y: (k * cy - c * w.y) * dt, z: (k * cz - c * w.z) * dt,
       }, true);
@@ -211,7 +221,7 @@ export function donorPreStep(ctx, donor, dt) {
     const limbs = donor.partList.filter((p) => !p.removed && (p.role === 'forearm' || p.role === 'upperArm' || p.role === 'shin' || p.role === 'head'));
     if (limbs.length) {
       const p = rng.pick(limbs);
-      const s = P.flailTorque * (beh.flail ?? 1) * (p.role === 'head' ? 0.3 : 1);
+      const s = P.flailTorque * (beh.flail ?? 1) * (p.role === 'head' ? 0.3 : 1) * S3;
       p.body.applyTorqueImpulse({ x: rng.range(-s, s) * 0.1, y: rng.range(-s, s) * 0.05, z: rng.range(-s, s) * 0.1 }, true);
     }
   }

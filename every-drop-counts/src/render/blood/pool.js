@@ -60,51 +60,84 @@ export function createPoolView(ctx) {
     uC: { value: 1 }, uS: { value: 0 }, uHW: { value: HW }, uHH: { value: HH }, uHD: { value: HD },
     uLevel: { value: 0 }, uTime: { value: 0 }, uBottom: { value: -R },
   };
-  const curtainMat = new THREE.ShaderMaterial({
-    name: 'poolVolume',
-    uniforms: { ...bloodUniforms, ...common },
-    vertexShader: /* glsl */`
+  // Two passes over the same curtain columns:
+  //  - ABSORB: back slices, MULTIPLICATIVE (dst *= transmission). Like tinted glass: what is behind
+  //    turns rich red, deeper red the more liquid lies in front of it; never pink haze, never black.
+  //  - FRONT: one alpha-blended slice at the glass: body tint, meniscus line, foam band, sheen.
+  const VS = /* glsl */`
       attribute vec3 aWave; attribute vec3 iSlice;
       uniform float uLevel; uniform float uBottom;
-      varying vec2 vW; varying float vDepth; varying float vFoam; varying float vFront; varying float vAlpha;
+      varying vec2 vW; varying float vDepth; varying float vFoam; varying float vAlpha;
       void main() {
         float top = uLevel + aWave.x;
         float y = position.y > 0.5 ? top : uBottom;
         vec3 p = vec3(position.x, y, iSlice.x);
-        vW = p.xy; vDepth = top - y; vFoam = aWave.z; vFront = iSlice.y; vAlpha = iSlice.z;
+        vW = p.xy; vDepth = top - y; vFoam = aWave.z; vAlpha = iSlice.z;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
+      }`;
+  const FS_HEAD = /* glsl */`
       uniform float uC; uniform float uS; uniform float uHW; uniform float uHH; uniform float uTime;
       uniform vec3 uBloodFresh; uniform vec3 uBloodDeep; uniform vec3 uBloodFoam; uniform vec3 uBloodHi;
-      varying vec2 vW; varying float vDepth; varying float vFoam; varying float vFront; varying float vAlpha;
-      void main() {
+      varying vec2 vW; varying float vDepth; varying float vFoam; varying float vAlpha;
+      void clipDrum() {
         float lx = uC * vW.x + uS * vW.y; float ly = -uS * vW.x + uC * vW.y;
         if (abs(lx) > uHW || abs(ly) > uHH) discard;
+      }`;
+  const absorbMat = new THREE.ShaderMaterial({
+    name: 'poolAbsorb',
+    uniforms: { ...bloodUniforms, ...common },
+    vertexShader: VS,
+    fragmentShader: FS_HEAD + /* glsl */`
+      void main() {
+        clipDrum();
+        vec3 key = uBloodFresh / max(max(uBloodFresh.r, uBloodFresh.g), max(uBloodFresh.b, 1e-4));
+        float deep = smoothstep(0.0, 4.0, vDepth);
+        vec3 T = mix(vec3(1.0), key * mix(1.0, 0.62, deep), vAlpha);
+        gl_FragColor = vec4(T, 1.0);
+      }`,
+    transparent: true, depthWrite: false,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+    blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+  });
+  const curtainMat = new THREE.ShaderMaterial({
+    name: 'poolFront',
+    uniforms: { ...bloodUniforms, ...common },
+    vertexShader: VS,
+    fragmentShader: FS_HEAD + /* glsl */`
+      void main() {
+        clipDrum();
         float d = vDepth;
-        vec3 col = mix(uBloodFresh * 0.42, uBloodDeep * 0.38, smoothstep(0.0, 2.6, d));
+        vec3 col = mix(uBloodFresh * 0.6, uBloodFresh * 0.3 + uBloodDeep * 0.3, smoothstep(0.0, 3.5, d));
         float a = vAlpha;
-        if (vFront > 0.5) {
-          float men = smoothstep(0.08, 0.0, d);
-          float n = 0.55 + 0.45 * sin(vW.x * 9.0 + uTime * 1.3) * sin(vW.x * 3.1 - uTime * 0.7 + d * 4.0);
-          float foam = smoothstep(0.42, 0.04, d) * clamp(vFoam * 1.4 + 0.12, 0.0, 1.0) * n;
-          col = mix(col, uBloodFoam * 0.8, foam * 0.65);
-          col += uBloodHi * men * 0.55;
-          a = max(a, max(men * 0.92, foam * 0.8));
-          float sh = sin(vW.x * 2.3 + uTime * 1.1 + d * 3.0) * sin(vW.x * 5.7 - uTime * 1.7 - d * 2.0);
-          col *= 1.0 + 0.16 * sh * smoothstep(1.6, 0.0, d);
-          // glassy vertical sheen on the front face
-          col += uBloodFresh * 0.08 * smoothstep(0.6, 1.0, sin(vW.x * 0.9 + 1.3));
-        }
+        float men = smoothstep(0.08, 0.0, d);
+        float n = 0.55 + 0.45 * sin(vW.x * 9.0 + uTime * 1.3) * sin(vW.x * 3.1 - uTime * 0.7 + d * 4.0);
+        float foam = smoothstep(0.42, 0.04, d) * clamp(vFoam * 1.4 + 0.12, 0.0, 1.0) * n;
+        col = mix(col, uBloodFoam * 0.8, foam * 0.65);
+        float line = smoothstep(0.045, 0.0, d);
+        col += uBloodHi * men * 0.55 + vec3(0.9, 0.75, 0.75) * line * 0.9;
+        a = max(a, max(max(men * 0.92, line), foam * 0.8));
+        float sh = sin(vW.x * 2.3 + uTime * 1.1 + d * 3.0) * sin(vW.x * 5.7 - uTime * 1.7 - d * 2.0);
+        col *= 1.0 + 0.16 * sh * smoothstep(1.6, 0.0, d);
+        col += uBloodFresh * 0.08 * smoothstep(0.6, 1.0, sin(vW.x * 0.9 + 1.3));
         gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
     transparent: true, depthWrite: false,
   });
-  const curtain = new THREE.Mesh(curtainGeo, curtainMat);
+  const frontGeo = new THREE.InstancedBufferGeometry();
+  frontGeo.setAttribute('position', curtainGeo.getAttribute('position'));
+  frontGeo.setIndex(curtainGeo.getIndex());
+  frontGeo.setAttribute('aWave', cWaveAttr);
+  const iFront = new Float32Array([HD - 0.03, 1, 0.24]);
+  frontGeo.setAttribute('iSlice', new THREE.InstancedBufferAttribute(iFront, 3));
+  frontGeo.instanceCount = 1;
+  const curtain = new THREE.Mesh(curtainGeo, absorbMat);
   curtain.frustumCulled = false; curtain.renderOrder = 5; curtain.name = 'poolVolume';
-  group.add(curtain);
+  const front = new THREE.Mesh(frontGeo, curtainMat);
+  front.frustumCulled = false; front.renderOrder = 5.5; front.name = 'poolFront';
+  group.add(curtain, front);
 
   // ---------------- surface sheet ----------------
   const sPos = []; const sIdx = [];
@@ -176,14 +209,17 @@ export function createPoolView(ctx) {
         vec3 Rv = reflect(-V, n);
         vec3 env = mix(uEnvBot, uEnvTop, smoothstep(-0.25, 0.55, Rv.y)) * uEnvTint;
         float sp = pow(max(dot(Rv, uSun), 0.0), 220.0) * 9.0 + pow(max(dot(Rv, uSun), 0.0), 24.0) * 0.45;
-        vec3 body = uBloodDeep * 0.85 + uBloodFresh * 0.16;
-        vec3 col = mix(body, env, F * 0.9) + (uBloodHi * 0.35 + vec3(0.65)) * sp * (under ? 0.3 : 1.0);
+        vec3 body = uBloodDeep * 0.6 + uBloodFresh * 0.32;
+        vec3 col = mix(body, env * mix(vec3(1.0), uBloodFresh * 1.4 + 0.25, 0.45), F * 0.45) + (uBloodHi * 0.35 + vec3(0.65)) * sp * (under ? 0.3 : 1.0);
         // meniscus against the walls / glass + froth
         float e = min(min(uHW - abs(lx), uHH - abs(ly)), uHD - abs(vP.z));
         float men = smoothstep(0.16, 0.0, e);
         float nz = 0.5 + 0.5 * sin(q.x * 17.0 + uTime * 0.9) * sin(q.y * 13.0 - uTime * 1.3 + q.x * 3.0);
         float froth = smoothstep(0.35, 0.85, vFoam * (0.6 + 0.8 * nz));
         col = mix(col, uBloodFoam * 0.85 * uEnvTint, clamp(froth * 0.85 + men * 0.5, 0.0, 1.0));
+        // a bright reflective band along the front edge so the surface reads from the usual camera height
+        float frontBand = smoothstep(uHD - 0.45, uHD - 0.02, vP.z) * (under ? 0.3 : 1.0);
+        col += (env * 0.12 + uBloodHi * 0.1) * frontBand;
         float a = under ? 0.96 : clamp(0.86 + F * 0.14 + froth * 0.1, 0.0, 1.0);
         gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
@@ -199,16 +235,16 @@ export function createPoolView(ctx) {
   let slices = 8;
   function buildSlices(nSl) {
     slices = Math.max(2, Math.min(MAX_SLICES, nSl | 0));
-    // back -> front so blending order is right; total absorption ~0.9 at the back wall
-    const back = slices - 1;
-    const aBack = 1 - Math.pow(0.035 / 0.5, 1 / back);
-    for (let k = 0; k < slices; k++) {
-      const front = k === slices - 1;
-      const z = front ? HD - 0.03 : -HD + 0.04 + ((HD * 2 - 0.25) * (k + 0.5)) / back;
-      iSlice[k * 3] = z; iSlice[k * 3 + 1] = front ? 1 : 0; iSlice[k * 3 + 2] = front ? 0.5 : aBack;
+    const back = slices - 1; // + the front slice (separate mesh)
+    // per-slice strength so that ~0.6 % of the non-blood channels survive the full depth
+    const k = 1 - Math.pow(0.006, 1 / back);
+    for (let j = 0; j < back; j++) {
+      // layers bunch toward the back wall (t^1.35) and stop ~0.9 m short of the glass: what is near the glass stays clear
+      const t = (j + 0.5) / back;
+      iSlice[j * 3] = -HD + 0.04 + (HD * 2 - 0.9) * Math.pow(t, 1.35); iSlice[j * 3 + 1] = 0; iSlice[j * 3 + 2] = k;
     }
     iSliceAttr.needsUpdate = true;
-    curtainGeo.instanceCount = slices;
+    curtainGeo.instanceCount = back;
   }
   buildSlices(ctx.quality.poolSlices || 8);
 
@@ -276,7 +312,7 @@ export function createPoolView(ctx) {
     for (let i = i0; i <= i1; i++) {
       const hl = i > i0 ? H[i - 1] : H[i]; const hr = i < i1 ? H[i + 1] : H[i];
       let acc = c2 * (hl + hr - 2 * H[i]) - 0.9 * V[i];
-      acc += -0.06 * al * (xs[i] - xmid);                            // slosh/tilt against angular acceleration
+      acc += -0.045 * al * (xs[i] - xmid);                            // slosh/tilt against angular acceleration
       const el = Math.exp(-(xs[i] - xl) / 0.6); const er = Math.exp(-(xr - xs[i]) / 0.6);
       acc += 0.3 * w * (xr * er + xl * el);                         // liquid dragged up the rising wall
       V[i] += acc * h - Math.max(-0.6, Math.min(0.6, IMP[i]));
@@ -286,11 +322,16 @@ export function createPoolView(ctx) {
     for (let i = i0 + 1; i < i1; i++) SL[i] = V[i - 1] + V[i + 1] - 2 * V[i];
     for (let i = i0 + 1; i < i1; i++) V[i] += 0.22 * SL[i];
     let mean = 0;
-    for (let i = i0; i <= i1; i++) { H[i] += V[i] * h; mean += H[i]; }
+    for (let i = i0; i <= i1; i++) {
+      // amplitude-dependent damping: big humps die fast, small chop stays lively
+      const a2 = H[i] * H[i];
+      if (a2 > 0.04) V[i] *= Math.exp(-h * 6 * (a2 - 0.04));
+      H[i] += V[i] * h; mean += H[i];
+    }
     mean /= n;
     for (let i = i0; i <= i1; i++) {
       let v = H[i] - mean;
-      if (v > 0.95) { v = 0.95; V[i] *= 0.5; } else if (v < -0.95) { v = -0.95; V[i] *= 0.5; }
+      if (v > 0.7) { v = 0.7; V[i] *= 0.5; } else if (v < -0.7) { v = -0.7; V[i] *= 0.5; }
       H[i] = v;
     }
     const fd = Math.exp(-h / 3.2);
@@ -351,8 +392,8 @@ export function createPoolView(ctx) {
       group.position.copy(drumGroup.position);
       const on = !!P && P.fill > 0.0005;
       fx.on = on;
-      if (!on) { curtain.visible = false; sheet.visible = false; fx.level = -1e9; pendN = 0; return; }
-      curtain.visible = true; sheet.visible = true;
+      if (!on) { curtain.visible = false; front.visible = false; sheet.visible = false; fx.level = -1e9; pendN = 0; return; }
+      curtain.visible = true; front.visible = true; sheet.visible = true;
       const level = P.prevLevel + (P.level - P.prevLevel) * alpha;
       LEVEL = level;
       fx.level = level;
@@ -365,13 +406,14 @@ export function createPoolView(ctx) {
         const xw = C * x - S * y;
         if (type === 1) splashAt(xw, z, size);
         else if (type === 2) {
-          for (let i = i0; i <= i1; i++) V[i] += (rnd() - 0.5) * 5 + 3.5 * Math.sin(xs[i] * 0.9 + rnd() * 6);
+          const p1 = rnd() * 6.28; const p2 = rnd() * 6.28; // smooth, low-frequency slosh (per-column noise makes teeth)
+          for (let i = i0; i <= i1; i++) V[i] += 3.2 * Math.sin(xs[i] * 0.7 + p1) + 1.4 * Math.sin(xs[i] * 1.9 + p2);
           const n = Math.max(2, Math.round((i1 - i0) / 12));
           for (let k2 = 0; k2 < n; k2++) splashAt(xs[i0] + rnd() * (xs[i1] - xs[i0]), (rnd() - 0.5) * 2 * HD * 0.8, 0.5 + rnd() * 0.4);
         } else if (type === 3) {
           if (UX * x + UY * y < level) { bubbles(x, y, z, 12, 0.3, 0.06); fx.addFoam(xw, 0.4); }
         } else if (type === 4) {
-          if (UX * x + UY * y < level + 2) for (let i = i0; i <= i1; i++) V[i] += (rnd() - 0.3) * 6;
+          if (UX * x + UY * y < level + 2) splashAt(xw, z, 1);
         }
       }
       pendN = 0;
@@ -470,7 +512,7 @@ export function createPoolView(ctx) {
     dispose() {
       offs.forEach((o) => o());
       worldGroup.remove(group);
-      curtainGeo.dispose(); curtainMat.dispose(); sheetGeo.dispose(); sheetMat.dispose();
+      curtainGeo.dispose(); frontGeo.dispose(); curtainMat.dispose(); absorbMat.dispose(); sheetGeo.dispose(); sheetMat.dispose();
       if (ctx.poolFx === fx) ctx.poolFx = null;
     },
   };

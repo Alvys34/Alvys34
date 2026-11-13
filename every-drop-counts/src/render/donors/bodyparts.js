@@ -9,7 +9,7 @@
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
-export const SLOT = { CLOTH: 0, SKIN: 1, TRIM: 2, FEET: 3, BAND: 4, HAIR: 5, ARM: 6, LEG: 7, LOWER: 8, ACCENT: 9 };
+export const SLOT = { CLOTH: 0, SKIN: 1, TRIM: 2, FEET: 3, BAND: 4, HAIR: 5, ARM: 6, LEG: 7, LOWER: 8, ACCENT: 9, HEM: 10 };
 export const HEAD_SCALE = 1.12; // visual head is a little bigger than the physics ball (cute + readable)
 export const HEAD_R = 0.13 * HEAD_SCALE;
 export const HAIR = { NONE: 0, CROP: 1, BOB: 2, BUN: 3, CURLY: 4, PONY: 5, HARDHAT: 6, SCRUBCAP: 7, SIDE: 8 };
@@ -95,7 +95,7 @@ export function buildPartGeometries(THREE) {
   G.upperArm = merge([
     piece(THREE, cyl(THREE, 0.074, 0.07, -0.01, 0.16, 12), S.CLOTH),
     piece(THREE, new THREE.SphereGeometry(0.07, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), S.CLOTH, { pos: [0, 0.16, 0] }),
-    piece(THREE, ring(THREE, 0.073, 0.014, -0.01), S.TRIM),
+    piece(THREE, ring(THREE, 0.073, 0.014, -0.01), S.HEM),
     piece(THREE, cap(THREE, 0.05, -0.165, 0.06, 10), S.ARM),
   ]);
   // ---- forearm (capsule r .05, y ±.135): arm + wristband + mitten hand ----
@@ -108,7 +108,7 @@ export function buildPartGeometries(THREE) {
   // ---- thigh (capsule r .075, y ±.205): gown hem + trim + leg ----
   G.thigh = merge([
     piece(THREE, cyl(THREE, 0.092, 0.088, 0.02, 0.215, 12), S.LOWER),
-    piece(THREE, ring(THREE, 0.091, 0.015, 0.02), S.TRIM),
+    piece(THREE, ring(THREE, 0.091, 0.015, 0.02), S.HEM),
     piece(THREE, cap(THREE, 0.068, -0.215, 0.1, 10), S.LEG, { warp: taper((y) => 0.88 + 0.12 * Math.max(0, Math.min(1, (y + 0.2) / 0.3))) }),
   ]);
   // ---- shin (capsule r .06, y ±.2): leg + grippy sock + foot ----

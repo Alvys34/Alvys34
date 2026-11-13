@@ -11,7 +11,7 @@
  * Faces: smile (sedated, blinks) / worried / hurt / drowning (puffed cheeks) / dead (X eyes, still smiling).
  */
 import { HUMANOID } from '../../sim/donors/humanoid.js';
-import { bloodColor } from '../environment/palette.js';
+import { bloodColors } from '../blood/palette.js';
 import { toTexture } from '../environment/textures.js';
 import { faceAtlasCanvas, FACE } from './faces.js';
 import { buildPartGeometries, buildHairGeometry, buildStumpGeometries } from './bodyparts.js';
@@ -27,13 +27,29 @@ export function createDonorViews(ctx) {
   const disposables = [];
   const track = (o) => { disposables.push(o); return o; };
 
-  const base = {};
-  for (const p of HUMANOID.parts) if (!base[p.role]) base[p.role] = p.shape;
-  const sizeOf = (s) => (s.type === 'box' ? s.hx : s.r);
+  // Geometry is authored at these FIXED reference sizes (the original standard humanoid); each
+  // instance is scaled per axis from the part's actual sim shape, so any donor scaling in the sim
+  // (types, global body scale) carries through to visuals automatically.
+  const REF = {
+    head: { type: 'ball', r: 0.13 }, chest: { type: 'box', hx: 0.19, hy: 0.2, hz: 0.11 }, pelvis: { type: 'box', hx: 0.16, hy: 0.09, hz: 0.1 },
+    upperArm: { type: 'capsule', hh: 0.1, r: 0.055 }, forearm: { type: 'capsule', hh: 0.085, r: 0.05 },
+    thigh: { type: 'capsule', hh: 0.13, r: 0.075 }, shin: { type: 'capsule', hh: 0.14, r: 0.06 },
+  };
+  void HUMANOID;
+  /** per-axis scale of shape s vs the reference -> out vec3 (x radial, y length, z radial/depth) */
+  function shapeScale(role, s, out) {
+    const b = REF[role];
+    if (!b || !s) return out.set(1, 1, 1);
+    if (s.type === 'box' && b.type === 'box') return out.set(s.hx / b.hx, s.hy / b.hy, s.hz / b.hz);
+    if (s.type === 'capsule' && b.type === 'capsule') { const r = s.r / b.r; return out.set(r, (s.hh + s.r) / (b.hh + b.r), r); }
+    const r = (s.r ?? s.hx ?? b.r) / (b.r ?? b.hx);
+    return out.set(r, r, r);
+  }
+  const ss = new THREE.Vector3();
 
   const faceTex = track(toTexture(THREE, faceAtlasCanvas(), { aniso: 4 }));
   const mats = createDonorMaterials(THREE, faceTex);
-  track(mats.body); track(mats.hair); track(mats.hairDepth); // hair/hairDepth kept for API compat (unused)
+  track(mats.body); track(mats.outline);
   const geos = buildPartGeometries(THREE);
   const hairGeos = buildHairGeometry(THREE);
 
@@ -55,8 +71,16 @@ export function createDonorViews(ctx) {
     m.name = `donor-${key}`;
     drumGroup.add(m);
     meshes[key] = m; attrs[key] = A; m.userData.key = key;
+    // inverted-hull outline sharing geometry + instance matrices (silhouette against pale tiles)
+    const o = new THREE.InstancedMesh(geo, mats.outline, cap);
+    o.instanceMatrix = m.instanceMatrix;
+    o.frustumCulled = false; o.count = 0; o.castShadow = false; o.receiveShadow = false;
+    o.name = `donor-${key}-outline`;
+    drumGroup.add(o);
+    outlines[key] = o;
     return m;
   };
+  const outlines = {};
   for (const role of ROLES) mkInst(role, geos[role], mats.body, CAP[role]);
   const hairMeshes = {}; // style id -> InstancedMesh (body material, slot HAIR)
   for (const st of Object.keys(hairGeos)) hairMeshes[st] = mkInst(`hair${st}`, hairGeos[st], mats.body, 40);
@@ -64,7 +88,8 @@ export function createDonorViews(ctx) {
   // stump caps (blood tint) + bone nubs
   const stumpGeos = buildStumpGeometries(THREE);
   track(stumpGeos.capGeo); track(stumpGeos.bone);
-  const capMat = track(new THREE.MeshStandardMaterial({ color: 0xb4001c, roughness: 0.22, metalness: 0.05 }));
+  const capMat = track(new THREE.MeshStandardMaterial({ roughness: 0.22, metalness: 0.05 }));
+  capMat.color = bloodColors.fresh; // VFX's shared blood colour object: follows red / streamer-green
   const boneMat = track(new THREE.MeshStandardMaterial({ color: 0xf4ecd8, roughness: 0.5 }));
   const caps = new THREE.InstancedMesh(stumpGeos.capGeo, capMat, MAX_STUMPS);
   const bones = new THREE.InstancedMesh(stumpGeos.bone, boneMat, MAX_STUMPS);
@@ -82,7 +107,6 @@ export function createDonorViews(ctx) {
   const pos = new THREE.Vector3(); const scl = new THREE.Vector3(); const off = new THREE.Vector3();
   const qa = new THREE.Quaternion(); const qb = new THREE.Quaternion(); const qc = new THREE.Quaternion();
   const Y = new THREE.Vector3(0, 1, 0); const dir = new THREE.Vector3();
-  const tint = new THREE.Color();
   let time = 0;
 
   function lookOf(d) {
@@ -121,9 +145,6 @@ export function createDonorViews(ctx) {
   return {
     update(dt, state, alpha) {
       time += dt;
-      bloodColor(ctx, tint);
-      mats.uniforms.uBlood.value.copy(tint);
-      capMat.color.copy(tint);
       for (const k in meshes) meshes[k].count = 0;
       let ns = 0;
       for (const p of state.parts) {
@@ -137,9 +158,10 @@ export function createDonorViews(ctx) {
         qa.set(p.pqx, p.pqy, p.pqz, p.pqw); qb.set(p.qx, p.qy, p.qz, p.qw);
         qa.slerp(qb, alpha);
         const s = p.shape;
-        const k = base[key] ? sizeOf(s) / sizeOf(base[key]) : 1;
-        if (key === 'head') { const h = k * L.headScale; scl.set(h, h, h); }
-        else { const g = L.girth[key] || 1; scl.set(k * g, k, k * g); }
+        shapeScale(key, s, ss);
+        const k = ss.x; // radial scale (stumps)
+        if (key === 'head') scl.copy(ss).multiplyScalar(L.headScale);
+        else { const g = L.girth[key] || 1; scl.set(ss.x * g, ss.y, ss.z * g); }
         m4.compose(pos, qa, scl);
         const i = mesh.count++;
         mesh.setMatrixAt(i, m4);
@@ -152,7 +174,7 @@ export function createDonorViews(ctx) {
         const pDrain = p.bloodMax > 0 ? 1 - p.blood / p.bloodMax : 0;
         writeInst(key, i, L, dmg + (opened ? 2 : 0), face, Math.max(dDrain, pDrain * 0.85));
         if (key === 'head') {
-          const hm = hairMeshes[L.cols[10]];
+          const hm = hairMeshes[L.hairStyle];
           if (hm && hm.count < 40) {
             const hi = hm.count++;
             hm.setMatrixAt(hi, m4);
@@ -179,6 +201,8 @@ export function createDonorViews(ctx) {
       }
       for (const k in meshes) {
         const m = meshes[k];
+        m.visible = m.count > 0;
+        const o = outlines[k]; o.count = m.count; o.visible = m.count > 0;
         m.instanceMatrix.needsUpdate = true;
         const A = attrs[k];
         A.aColA.needsUpdate = true; A.aColB.needsUpdate = true; A.aColC.needsUpdate = true; A.aState.needsUpdate = true;
@@ -192,6 +216,7 @@ export function createDonorViews(ctx) {
     },
     dispose() {
       for (const k in meshes) { drumGroup.remove(meshes[k]); meshes[k].dispose(); }
+      for (const k in outlines) drumGroup.remove(outlines[k]);
       drumGroup.remove(caps); drumGroup.remove(bones); caps.dispose(); bones.dispose();
       for (const d of disposables) d.dispose();
     },

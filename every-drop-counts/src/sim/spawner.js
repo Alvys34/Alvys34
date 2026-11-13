@@ -46,7 +46,7 @@ export function createSpawner(ctx, hatch) {
       const x = p0[0]; const y = p0[1];
       const z = back ? p0[2] + ctx.rng.range(0, 0.6) : ctx.rng.range(-1.5, 1.5);
       // wait if the hatch mouth is crowded (max 1.5 s)
-      if (crowded(ctx, x, y, z, 0.7) && wait < 1.5) { wait += dt; return; }
+      if (crowded(ctx, x, y, z, 0.7 * (T.donor.scale ?? 1)) && wait < 1.5) { wait += dt; return; }
       wait = 0;
       const item = queue.shift();
       // back hatch: push toward the camera and sideways in-plane; wall hatch: push along the normal

@@ -4,7 +4,24 @@
  */
 import { CSS, makeRng } from './palette.js';
 
-export const FONT = '"Trebuchet MS", "Segoe UI", "Nunito", "DejaVu Sans", Verdana, Arial, sans-serif';
+/** Bundled UI font (@fontsource-variable/nunito, imported by src/ui) first; system fallbacks only until it loads. */
+export const FONT_FAMILY = 'Nunito Variable';
+export const FONT = `"${FONT_FAMILY}", "Nunito", "Trebuchet MS", "Segoe UI", "DejaVu Sans", Verdana, Arial, sans-serif`;
+
+/**
+ * Call `cb` once the bundled font face is loaded (canvases are drawn immediately with the fallback,
+ * then redrawn by the callback so signage looks identical on every OS). No-op without FontFaceSet.
+ */
+export function onFontsReady(cb) {
+  try {
+    const fs = typeof document !== 'undefined' && document.fonts;
+    if (!fs || !fs.load) return;
+    const fam = `"${FONT_FAMILY}"`;
+    Promise.all([fs.load(`700 48px ${fam}`), fs.load(`800 48px ${fam}`), fs.load(`900 48px ${fam}`)])
+      .then((res) => { if (res.some((r) => r && r.length)) cb(); })
+      .catch(() => { /* keep the fallback drawing */ });
+  } catch { /* keep the fallback drawing */ }
+}
 export const FONT_COND = '"Arial Narrow", "Roboto Condensed", "DejaVu Sans Condensed", "Trebuchet MS", Arial, sans-serif';
 
 export function makeCanvas(w, h) {

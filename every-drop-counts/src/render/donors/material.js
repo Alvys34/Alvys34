@@ -1,19 +1,26 @@
 /**
  * Donor shader (ART owns): MeshStandardMaterial + onBeforeCompile. Per-instance data (all
  * InstancedBufferAttributes on each role geometry):
- *   aColA = (cloth, skin, trim, feet)   aColB = (band, hair, arm, leg)   aColC = (lower, accent, hairStyle, pattern)
+ *   aColA = (cloth, skin, trim, feet)   aColB = (band, hair, arm, leg)   aColC = (lower, accent, hem, pattern)
  *     colours are 0xRRGGBB packed in a float (exact up to 2^24); a NEGATIVE colour = the shared
- *     blood tint uniform (Thin-Blood wristband).
+ *     blood colour (VFX bloodColors.fresh — Thin-Blood wristband).
  *   aState = (damage [+2 if the wound is open], faceCell, drained, seed)
- * Per-vertex: aSlot (colour slot), aFace (face-atlas u, v, mask), aStyle (hair only).
- * Shadows: hair uses a matching customDepthMaterial so unused hairstyles cast nothing.
+ * Per-vertex: aSlot (colour slot), aFace (face-atlas u, v, mask).
+ *
+ * Readability: a soft rim light (fresnel, warm white) makes LIVE donors pop against dark blood;
+ * the inverted-hull outline (createOutlineMaterial) separates them from pale tiles. Dead / drained
+ * donors lose most of the rim and get darker + desaturated, so corpses read as "done".
  */
+import { bloodColors } from '../blood/palette.js';
+
+export const FACE_SCALE = 1.16; // face features drawn this much larger than the atlas layout
+
 const COMMON = /* glsl */`
 uniform vec3 uBlood;
 attribute float aSlot;
 attribute vec3 aFace;
 attribute vec4 aColA; attribute vec4 aColB; attribute vec4 aColC; attribute vec4 aState;
-varying vec3 vDCol; varying vec3 vObj; varying vec3 vFace; varying vec4 vState; varying float vSlot; varying float vSkin; varying float vPattern;
+varying vec3 vDCol; varying vec3 vObj; varying vec3 vFace; varying vec4 vState; varying float vSkin; varying float vPattern;
 vec3 edcHex(float h) {
   if (h < 0.0) return uBlood;
   vec3 c = vec3(floor(h / 65536.0), mod(floor(h / 256.0), 256.0), mod(h, 256.0)) / 255.0;
@@ -35,34 +42,34 @@ const VERT_MAIN = /* glsl */`
     else if (s == 7) { hx = aColB.w; sk = aColB.w == aColA.y ? 1.0 : 0.0; }
     else if (s == 8) hx = aColC.x;
     else if (s == 9) hx = aColC.y;
+    else if (s == 10) hx = aColC.z;
     vDCol = edcHex(hx);
-    vSkin = sk; vObj = position; vFace = aFace; vState = aState; vSlot = float(s);
+    vSkin = sk; vObj = position; vFace = aFace; vState = aState;
     vPattern = (s == 0 || s == 8) ? aColC.w : 0.0;
-    #ifdef EDC_HAIR
-      if (abs(aStyle - aColC.z) > 0.5) transformed = vec3(0.0);
-    #endif
   }
 `;
 
 const FRAG_PARS = /* glsl */`
 uniform vec3 uBlood;
 uniform sampler2D uFaceMap;
-varying vec3 vDCol; varying vec3 vObj; varying vec3 vFace; varying vec4 vState; varying float vSlot; varying float vSkin; varying float vPattern;
+varying vec3 vDCol; varying vec3 vObj; varying vec3 vFace; varying vec4 vState; varying float vSkin; varying float vPattern;
 float edcHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float edcNoise(vec3 x) {
   vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(edcHash(i), edcHash(i + vec3(1,0,0)), f.x), mix(edcHash(i + vec3(0,1,0)), edcHash(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(edcHash(i + vec3(0,0,1)), edcHash(i + vec3(1,0,1)), f.x), mix(edcHash(i + vec3(0,1,1)), edcHash(i + vec3(1,1,1)), f.x), f.y), f.z);
 }
+float edcDead() { return step(4.5, vState.y + 0.01); }
 `;
 
 const FRAG_MAIN = /* glsl */`
   {
     vec3 col = vDCol;
-    float dead = step(4.5, vState.y + 0.01);
+    float dead = edcDead();
+    float drained = clamp(vState.z, 0.0, 1.0);
     // drained / dead skin goes pale and cool
     if (vSkin > 0.5) {
-      col = mix(col, vec3(0.62, 0.66, 0.70) * (0.55 + 0.45 * max(col.r, max(col.g, col.b))), clamp(vState.z * 0.6 + dead * 0.18, 0.0, 0.8));
+      col = mix(col, vec3(0.62, 0.66, 0.70) * (0.55 + 0.45 * max(col.r, max(col.g, col.b))), clamp(drained * 0.6 + dead * 0.18, 0.0, 0.8));
     }
     // hospital-gown print: tiny lighter dots
     if (vPattern > 0.5) {
@@ -71,13 +78,12 @@ const FRAG_MAIN = /* glsl */`
       float d = smoothstep(0.2, 0.14, length(cell));
       col = mix(col, min(vec3(1.0), col * 1.22 + 0.05), d * 0.55);
     }
-    // painted face
+    // painted face (varyings are not exact integers: round the cell before splitting row / column)
     if (vFace.z > 0.0) {
-      // varyings are not exact integers: round before splitting the cell index into row / column
       float cell = floor(vState.y + 0.5);
       float row = floor((cell + 0.5) / 3.0);
       float colm = cell - row * 3.0;
-      vec2 fuv = clamp(vFace.xy, 0.01, 0.99);
+      vec2 fuv = clamp((vFace.xy - vec2(0.5, 0.47)) / ${FACE_SCALE.toFixed(3)} + vec2(0.5, 0.5), 0.01, 0.99);
       vec2 auv = vec2((colm + fuv.x) / 3.0, 1.0 - (row + 1.0 - fuv.y) / 2.0);
       vec4 f = texture2D(uFaceMap, auv);
       col = mix(col, f.rgb, f.a * vFace.z);
@@ -95,38 +101,53 @@ const FRAG_MAIN = /* glsl */`
       float core = smoothstep(tc, tc + 0.05, n) * opened;
       col = mix(col, uBlood * mix(0.55, 0.9, smoothstep(tc + 0.05, tc + 0.2, n)), core);
     }
-    // dead: a touch desaturated
-    col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))), dead * 0.3);
+    // corpses: desaturated and a little darker; the living stay saturated
+    float spent = max(dead, drained * 0.6);
+    col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))), spent * 0.45);
+    col *= 1.0 - 0.18 * spent;
     diffuseColor.rgb = col;
   }
 `;
 
+const RIM = /* glsl */`
+  #include <emissivemap_fragment>
+  {
+    vec3 vdir = normalize(vViewPosition);
+    float rim = pow(1.0 - clamp(dot(normal, vdir), 0.0, 1.0), 2.6);
+    float alive = 1.0 - max(edcDead(), clamp(vState.z, 0.0, 1.0) * 0.7);
+    totalEmissiveRadiance += vec3(1.0, 0.96, 0.9) * rim * (0.06 + 0.32 * alive);
+  }
+`;
+
 export function createDonorMaterials(THREE, faceTexture) {
-  const uniforms = { uBlood: { value: new THREE.Color(0xb4001c) }, uFaceMap: { value: faceTexture } };
-  const make = (hair) => {
-    const m = new THREE.MeshStandardMaterial({ roughness: 0.68, metalness: 0 });
-    m.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, uniforms);
-      sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', `#include <common>\n${COMMON}${hair ? 'attribute float aStyle;\n' : ''}`)
-        .replace('#include <begin_vertex>', VERT_MAIN);
-      sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
-        .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_MAIN}`);
-      if (hair) sh.vertexShader = `#define EDC_HAIR\n${sh.vertexShader}`;
-    };
-    m.customProgramCacheKey = () => (hair ? 'edc-donor-hair' : 'edc-donor');
-    return m;
-  };
-  const body = make(false);
-  const hair = make(true);
-  // hair shadow: collapse unused styles in the depth pass too
-  const hairDepth = new THREE.MeshDepthMaterial();
-  hairDepth.onBeforeCompile = (sh) => {
+  const uniforms = { uBlood: { value: bloodColors.fresh }, uFaceMap: { value: faceTexture } };
+  const body = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0 });
+  body.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aStyle;\nattribute vec4 aColC;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nif (abs(aStyle - aColC.z) > 0.5) transformed = vec3(0.0);');
+      .replace('#include <common>', `#include <common>\n${COMMON}`)
+      .replace('#include <begin_vertex>', VERT_MAIN);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_MAIN}`)
+      .replace('#include <emissivemap_fragment>', RIM);
   };
-  hairDepth.customProgramCacheKey = () => 'edc-hair-depth';
-  return { body, hair, hairDepth, uniforms };
+  body.customProgramCacheKey = () => 'edc-donor-2';
+  return { body, outline: createOutlineMaterial(THREE), uniforms };
+}
+
+/**
+ * Inverted-hull outline for instanced donor parts: back faces pushed out along the normal by a
+ * constant object-space width, flat dark ink. Shares geometry + instanceMatrix with the body mesh.
+ */
+export function createOutlineMaterial(THREE, width = 0.012) {
+  const m = new THREE.MeshBasicMaterial({ color: 0x1b2624, side: THREE.BackSide });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uWidth = { value: width };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uWidth;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * uWidth;');
+  };
+  m.customProgramCacheKey = () => 'edc-donor-outline';
+  return m;
 }

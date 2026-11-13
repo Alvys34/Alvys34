@@ -124,6 +124,8 @@ export function createParticles(ctx, { cap, mist = false, renderOrder = 0 }) {
 
   function spawn(x, y, z, ivx, ivy, ivz, size, lifeS, k = 0) {
     if (count >= limit) return -1;
+    // readability: big opaque drops should not curtain the donors -> damp their motion toward the glass
+    if (!mist && ivz > 0 && size > 0.04) ivz *= 0.3;
     const i = count++;
     px[i] = x; py[i] = y; pz[i] = z; vx[i] = ivx; vy[i] = ivy; vz[i] = ivz;
     sz[i] = size; life[i] = lifeS; life0[i] = lifeS; kind[i] = k; seed[i] = rnd();

@@ -73,3 +73,15 @@ export function createQualityGovernor({ budgetMs = 21, goodMs = 13, applyLevel, 
     },
   };
 }
+
+/**
+ * Can this GPU render to (and blend into) HalfFloat/Float targets? (EXT_color_buffer_float /
+ * EXT_color_buffer_half_float). ?nofloat=1 forces the fallback path for testing.
+ */
+export function floatTargetsOK(renderer) {
+  try { if (typeof location !== 'undefined' && /[?&]nofloat=1/.test(location.search)) return false; } catch { /* no location */ }
+  try {
+    const ext = renderer.extensions;
+    return !!(ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float'));
+  } catch { return false; }
+}

@@ -12,7 +12,7 @@
  *   ctx.environment.emergency   0..1 escalation amount actually shown by the lights
  */
 import { sharedMaterials } from './palette.js';
-import { signAtlas, toTexture } from './textures.js';
+import { signAtlas, toTexture, onFontsReady } from './textures.js';
 import { createLighting } from './lighting.js';
 import { createFacility } from './facility.js';
 import { createDrum } from './drum.js';
@@ -24,6 +24,8 @@ export function getSigns(ctx) {
   const texture = toTexture(THREE, atlas.canvas, { aniso: 8 });
   const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.55, metalness: 0, transparent: true, alphaTest: 0.02 });
   ctx.artSigns = { texture, material, rects: atlas.rects };
+  // same layout (rects) on redraw, only the glyphs change once the bundled font is in
+  onFontsReady(() => { if (ctx.artSigns && ctx.artSigns.texture === texture) { texture.image = signAtlas().canvas; texture.needsUpdate = true; } });
   return ctx.artSigns;
 }
 

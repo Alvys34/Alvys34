@@ -72,11 +72,12 @@ function handleSide(ctx, self, other, F, speed, dt, impacts, D) {
   }
   if (speed > D.impactMinDv) {
     let dmg = (speed - D.impactMinDv) * D.impactScale;
-    if (other.kind === 'part') dmg *= Math.min(2.5, Math.sqrt(other.part.mass / D.impactMassRef));
-    else if (other.kind === 'prop' && other.dyn) dmg *= Math.min(2.5, Math.sqrt(other.dyn.mass / D.impactMassRef));
+    const mref = D.impactMassRef * (ctx.T.donor.scale ?? 1);
+    if (other.kind === 'part') dmg *= Math.min(2.5, Math.sqrt(other.part.mass / mref));
+    else if (other.kind === 'prop' && other.dyn) dmg *= Math.min(2.5, Math.sqrt(other.dyn.mass / mref));
     if (part.role === 'head') dmg *= 1.3;
     damagePart(ctx, part, dmg, 'blunt', 'impact');
-  } else if (F > D.crushForce) {
-    damagePart(ctx, part, D.crushDps * dt * (F / D.crushForce), 'crush', 'crush');
+  } else if (F > D.crushForce * (ctx.T.donor.scale ?? 1)) {
+    damagePart(ctx, part, D.crushDps * dt * (F / (D.crushForce * (ctx.T.donor.scale ?? 1))), 'crush', 'crush');
   }
 }

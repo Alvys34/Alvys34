@@ -226,10 +226,10 @@ function choosePlan(s, crowd, inspectors, mem) {
     if (submerged) {
       // the pool covers it at its own "down" angle: find an angle where it sits AT the waterline
       // (floaters drift into it), else use it from above (slam the floating crowd up into it)
-      const wl = h.type === 'crusher' || h.type === 'spikes' ? null : waterlineAngle(s, x, y);
+      // (a 'waterline' hold was tried and dropped: it rarely produced — agitating sloshes the
+      //  floaters through a half-submerged blade far better)
       const head = headroomTo(s, x, y);
-      if (wl != null) { tactic = 'waterline'; target = wl; score *= 1.0; }
-      else if (head < 5.5) { tactic = 'slamUp'; target = wrap(target + Math.PI); score *= 1.1; } else score *= 0.25;
+      if (head < 5.5) { tactic = 'slamUp'; target = wrap(target + Math.PI); score *= 1.1; } else score *= 0.6;
     }
     if (h.type === 'grinder' && h.view.clogged) score *= 1.5;
     if (h.type === 'crusher' && fill > 0.35) score *= 0.4;

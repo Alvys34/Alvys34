@@ -12,7 +12,8 @@
  * createHazardViews(ctx) -> { onLevel(state), update(dt, state, alpha), setQuality(q, name), dispose() }
  * Builders: HAZARD_BUILDERS[kind] = (ctx, view, kit) => ({ group, update(view, dt, state), dispose? })
  */
-import { PAL, bloodColor, sharedMaterials } from '../environment/palette.js';
+import { PAL, sharedMaterials } from '../environment/palette.js';
+import { bloodColors } from '../blood/palette.js';
 import { builder, rbox, cylZ, atlasPlane } from '../environment/geo.js';
 import { stripeTexture, sawBlurCanvas, toTexture } from '../environment/textures.js';
 import { getSigns } from '../environment/index.js';
@@ -43,7 +44,7 @@ export function createHazardViews(ctx) {
     blade: M.blade,
     blur: blurTex,
     signs: getSigns(ctx),
-    blood: new THREE.Color(0xb4001c),
+    blood: bloodColors.fresh, // VFX's shared blood colour (live object)
     contacts: [], // spike/saw stain hooks: (pos) => bool
   };
   let items = [];
@@ -79,7 +80,6 @@ export function createHazardViews(ctx) {
     onLevel(state) { build(state); },
     update(dt, state) {
       if (state.hazards !== lastHazards) build(state);
-      bloodColor(ctx, kit.blood);
       for (const it of items) if (it.update) it.update(it.hazard.view, dt, state);
     },
     setQuality() {},
@@ -134,13 +134,13 @@ function sawGang(ctx, kit, radius, z0, z1) {
   const C = builder(THREE, { colors: true });
   for (let i = 0; i < n; i++) {
     const z = z0 + (i + 0.5) * (depth / n);
-    const g = new THREE.ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.01, bevelSegments: 1, curveSegments: 3 });
+    const g = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false, curveSegments: 3 });
     B.add(g, { pos: [0, 0, z - 0.022], color: 0xffffff });
     // decorative ring + vent slots, slightly darker
-    C.add(new THREE.RingGeometry(radius * 0.42, radius * 0.5, 28), { pos: [0, 0, z + 0.034], color: 0x9aa6aa });
+    C.add(new THREE.RingGeometry(radius * 0.42, radius * 0.5, 20), { pos: [0, 0, z + 0.03], color: 0x9aa6aa });
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2;
-      C.add(new THREE.CircleGeometry(radius * 0.07, 10), { pos: [Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62, z + 0.034], color: 0x3b4447 });
+      C.add(new THREE.CircleGeometry(radius * 0.07, 10), { pos: [Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62, z + 0.03], color: 0x3b4447 });
     }
   }
   // hub: drum through the gang + collars
@@ -219,7 +219,8 @@ function buildSpikes(ctx, view, kit) {
   group.add(cones);
   // blood-stained tips (instanced sleeves over the top of hit spikes)
   const tipGeo = kit.track(new THREE.ConeGeometry(0.068, h * 0.5, 6).translate(0, h * 0.75, 0));
-  const tipMat = new THREE.MeshStandardMaterial({ color: 0xb4001c, roughness: 0.25, metalness: 0.1 });
+  const tipMat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.1 });
+  tipMat.color = bloodColors.fresh;
   const tips = new THREE.InstancedMesh(tipGeo, tipMat, count);
   tips.count = 0;
   group.add(tips);
@@ -252,7 +253,6 @@ function buildSpikes(ctx, view, kit) {
   });
   return {
     group,
-    update() { if (!tipMat.color.equals(kit.blood)) tipMat.color.copy(kit.blood); },
     dispose() { tipMat.dispose(); },
   };
 }

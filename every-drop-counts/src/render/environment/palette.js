@@ -2,13 +2,13 @@
  * EVERY DROP COUNTS — art palette + shared materials (ART owns).
  *
  * Rule: blood is the ONLY saturated red in the game. Nothing in this palette is red; anything
- * blood-coloured (stump caps, wound centres, the collection-tank gauge, the Thin-Blood band)
- * reads its colour through `bloodColor(ctx)` so it follows the shared tint (red / streamer green).
+ * blood-coloured (stump caps, wound centres, spike tips, stained blades, the collection-tank gauge,
+ * the Thin-Blood band) uses VFX's live `bloodColors` object from src/render/blood/palette.js, so the
+ * red / streamer-green setting recolours it.
  *
- *   import { PAL, CSS, sharedMaterials, bloodColor } from './palette.js';
+ *   import { PAL, CSS, sharedMaterials } from './palette.js';
  *   const M = sharedMaterials(ctx);    // cached on ctx — every ART piece shares one set
  */
-import { bloodColors } from '../blood/palette.js';
 
 /** Hex palette (three.js colours). Limited on purpose: mint, cream, chrome, hazard, a few pastels. */
 export const PAL = {
@@ -38,7 +38,7 @@ export const CSS = {
 /** Donor palettes (render picks per donor from `look.seed`; sim colour hints are fallbacks). */
 export const DONOR_PAL = {
   // mid-value pastels: bright against the cream drum, never red/pink
-  gowns: [0x63c9a6, 0x6fb0ec, 0xf3a865, 0xa58be0, 0xf0cf4f, 0x55c3cc, 0x93cf6b, 0x8fa3f0],
+  gowns: [0x3fc79a, 0x5aa6f2, 0xf89a4a, 0x9a78e6, 0xf2c92c, 0x2fbccb, 0x83cc4c, 0x7a8ff2],
   skins: [0xf7d9c4, 0xf0c3a0, 0xdca57a, 0xbb8558, 0x94633f, 0x6b462e, 0xe9c9ae],
   hair: [0x2a2220, 0x4a3426, 0x6e4a30, 0x9a6b42, 0xc9a36a, 0xe2cd94, 0xb8b4ac, 0xe9e5dc, 0x3b3a3f],
   socks: [0xfdfcf6, 0xcde9dc, 0xf6e08e, 0xc6b6e6, 0x9ccbe8],
@@ -46,20 +46,10 @@ export const DONOR_PAL = {
   // types
   thinSkin: [0xeee4de, 0xe8ddd8, 0xf0e6e2],
   thinGown: [0x9fa9cc, 0xa9a2c9, 0x97b3c4],
-  bigGown: [0x4fa88c, 0x5b8fd6, 0xd98d4a, 0x8a70c8],
+  bigGown: [0x2fa07c, 0x4a84de, 0xe8873a, 0x7e60cc],
   suit: 0x3c4a5c, suitDark: 0x2c3644, shirt: 0xf4f6f8, tie: 0x2d6d8a, hardhat: 0xff8a00, shoe: 0x2a2a2e,
   staff: [0x2f8f7c, 0x3a9c88, 0x2c7f9e], staffCap: 0x7fd0bd, staffShoe: 0xeef2f0,
 };
-
-/**
- * The blood tint used by ART for anything blood-coloured (stump caps, wound cores, spike tips,
- * stained blades, the collection-tank gauge, the Thin-Blood band). Source of truth: VFX's
- * src/render/blood/palette.js (`bloodColors`, follows the red / streamer-green setting).
- * `which`: 'fresh' (default) | 'deep' | 'dry' | 'hi'. Writes into `out` — no allocation.
- */
-export function bloodColor(ctx, out, which = 'fresh') {
-  return out.copy(bloodColors[which] || bloodColors.fresh);
-}
 
 /** Small deterministic RNG (mulberry32) for procedural art. */
 export function makeRng(seed = 1) {

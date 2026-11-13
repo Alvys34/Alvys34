@@ -18,6 +18,7 @@
  * edges), so the front glass smears but never hides play.
  */
 import { bloodUniforms } from './palette.js';
+import { floatTargetsOK } from '../quality.js';
 
 export const SURF = { BACK: 0, GLASS: 1, FLOOR: 2, CEIL: 3, LEFT: 4, RIGHT: 5 };
 
@@ -34,10 +35,13 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
   // ---------------- render target ----------------
   let texW = 0; let texH = 0;
   let rt = null;
+  // HalfFloat when the GPU can render to it; otherwise 8-bit with density stored at 1/ENC scale
+  const FLOAT_OK = floatTargetsOK(renderer);
+  const ENC = FLOAT_OK ? 1 : 0.2;
   function makeRT(w) {
     const h = Math.round((w * AH) / AW);
     const t = new THREE.WebGLRenderTarget(w, h, {
-      type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
+      type: FLOAT_OK ? THREE.HalfFloatType : THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
     });
     t.texture.name = 'bloodAtlas';
@@ -61,7 +65,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
 
   const stampMat = new THREE.ShaderMaterial({
     name: 'bloodStamp',
-    uniforms: { uRegion: { value: regionU }, uAtlas: { value: new THREE.Vector2(AW, AH) } },
+    uniforms: { uRegion: { value: regionU }, uAtlas: { value: new THREE.Vector2(AW, AH) }, uEnc: { value: ENC } },
     vertexShader: /* glsl */`
       attribute vec4 iA; // u, v (atlas metres), region, seed
       attribute vec4 iB; // dir.xy, halfLen, halfWidth
@@ -80,6 +84,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
       }`,
     fragmentShader: /* glsl */`
       varying vec2 vQ; varying vec2 vM; varying vec4 vReg; varying vec4 vC; varying float vSeed; varying float vAsp;
+      uniform float uEnc;
       float h1(float n) { return fract(sin(n) * 43758.5453); }
       void main() {
         if (vM.x < vReg.x || vM.y < vReg.y || vM.x > vReg.z || vM.y > vReg.w) discard;
@@ -91,7 +96,8 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
           float edge = 0.80 + 0.10 * sin(a * 3.0 + s) + 0.07 * sin(a * 7.0 + s * 2.3) + 0.05 * sin(a * 13.0 + s * 5.1);
           float finger = pow(max(0.0, sin(a * 7.0 + s * 3.7)), 16.0) * 0.22 * step(0.7, h1(vSeed * 91.7));
           edge += finger;
-          d = smoothstep(edge, edge - 0.10, r) * (0.75 + 0.6 * (1.0 - r * r));
+          // feathered rim, thick domed centre (reads as a pooled drop, not a sticker)
+          d = smoothstep(edge, edge - 0.45, r) * (0.4 + 1.15 * (1.0 - r * r));
           // a leading "head" on elongated splats (droplet hit at an angle)
           if (vAsp > 1.3) d += smoothstep(0.45, 0.25, length(q - vec2(0.55, 0.0))) * 0.5;
         } else if (kind < 1.5) {
@@ -112,7 +118,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
         }
         d *= amt;
         if (d <= 0.0005) discard;
-        gl_FragColor = vec4(d, d * vC.z, 0.0, 0.0);
+        gl_FragColor = vec4(d, d * vC.z, 0.0, 0.0) * uEnc;
       }`,
     blending: THREE.CustomBlending,
     blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
@@ -190,7 +196,8 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
   const shared = {
     uBloodMap: { value: null },
     uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 640) },
-    uBump: { value: 1.0 },
+    uBump: { value: 1.7 },
+    uDec: { value: 1 / ENC },
   };
   function patch(material, glass) {
     material.onBeforeCompile = (sh) => {
@@ -200,20 +207,26 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBloodUv = aBloodUv; vLocal = aLocal; vBT = normalize(normalMatrix * aBT); vBB = normalize(normalMatrix * aBB);');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-          uniform sampler2D uBloodMap; uniform vec2 uTexel; uniform float uBump;
+          uniform sampler2D uBloodMap; uniform vec2 uTexel; uniform float uBump; uniform float uDec;
           uniform vec3 uBloodFresh; uniform vec3 uBloodDeep; uniform vec3 uBloodDry; uniform vec3 uBloodHi;
           varying vec2 vBloodUv; varying vec3 vBT; varying vec3 vBB; varying vec2 vLocal;
-          float bloodH(vec2 uv) { float d = texture2D(uBloodMap, uv).r; return 1.0 - exp(-d * 2.2); }
+          float bloodH(vec2 uv) { float d = texture2D(uBloodMap, uv).r * uDec; return 1.0 - exp(-d * 2.2); }
           float gBloodA; float gBloodWet; float gBloodCov;`)
         .replace('#include <color_fragment>', `#include <color_fragment>
           {
-            vec4 bm = texture2D(uBloodMap, vBloodUv);
+            vec4 bm = texture2D(uBloodMap, vBloodUv) * uDec;
             float dens = max(bm.r, 0.0);
             float wet = clamp(bm.g / (dens + 1e-3), 0.0, 1.0);
             float cov = 1.0 - exp(-dens * 2.2);
-            float a = smoothstep(0.10, 0.32, cov);
-            vec3 col = mix(uBloodDry, uBloodFresh, wet * 0.85 + 0.15 * smoothstep(0.7, 1.0, cov) * wet);
-            col = mix(col, uBloodDeep, smoothstep(0.75, 0.995, cov) * (0.75 - 0.45 * wet));
+            // feathered edge
+            float a = smoothstep(0.03, 0.62, cov);
+            // thin rim lighter + translucent, thick centre darker (liquid); dried = dull, dark, low contrast
+            float thick = smoothstep(0.35, 0.97, cov);
+            vec3 fresh = mix(uBloodFresh * 1.12, uBloodFresh * 0.6 + uBloodDeep * 0.4, thick);
+            vec3 dry = uBloodDry * mix(1.0, 0.72, thick);
+            vec3 col = mix(dry, fresh, smoothstep(0.0, 0.85, wet));
+            // dried stains let the tiles show through: the back wall never becomes a solid red sheet
+            a *= mix(0.68, 1.0, smoothstep(0.1, 0.7, wet));
             ${glass ? `
             vec2 g = abs(vLocal * 2.0 - 1.0);
             float edge = smoothstep(0.30, 0.95, max(g.x, g.y));
@@ -224,17 +237,17 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
             diffuseColor = vec4(col, a);
           }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor = mix(${glass ? '0.22' : '0.62'}, ${glass ? '0.04' : '0.06'}, gBloodWet * smoothstep(0.2, 0.6, gBloodCov));`)
+          roughnessFactor = mix(${glass ? '0.22' : '0.7'}, ${glass ? '0.04' : '0.05'}, smoothstep(0.15, 0.8, gBloodWet) * smoothstep(0.2, 0.6, gBloodCov));`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           {
             float hC = bloodH(vBloodUv);
             float hU = bloodH(vBloodUv + vec2(uTexel.x, 0.0));
             float hV = bloodH(vBloodUv + vec2(0.0, uTexel.y));
-            vec2 gr = vec2(hU - hC, hV - hC) * uBump * (0.35 + 0.65 * gBloodWet);
+            vec2 gr = vec2(hU - hC, hV - hC) * uBump * (0.25 + 0.75 * gBloodWet);
             normal = normalize(normal - gr.x * vBT - gr.y * vBB);
           }`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-          totalEmissiveRadiance += uBloodFresh * 0.05 * gBloodWet * gBloodA;`);
+          totalEmissiveRadiance += uBloodFresh * 0.04 * gBloodWet * gBloodA;`);
     };
     material.customProgramCacheKey = () => (glass ? 'edc-blood-glass' : 'edc-blood-walls');
   }
@@ -373,7 +386,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
       n = 0;
     }
     decayAcc += dt;
-    if (decayAcc >= 0.1) {
+    if (decayAcc >= (FLOAT_OK ? 0.1 : 1.0)) { // 8-bit: bigger, rarer steps so small factors still move a texel
       const t = decayAcc; decayAcc = 0;
       // drying: wet -> dry over ~25 s; glass: centre clears in ~35 s, edges ~140 s; faster when over budget
       const over = glassLoad > GLASS_CAP * 0.8 ? 2.5 : 1;
@@ -395,6 +408,7 @@ export function createBloodAtlas(ctx, { HW, HH, HD }) {
     get dropped() { return dropped; },
     get resolution() { return [texW, texH]; },
     get texture() { return rt ? rt.texture : null; },
+    get floatTargets() { return FLOAT_OK; },
     dispose() {
       drumGroup.remove(walls, glassMesh);
       wallGeo.dispose(); glassGeo.dispose(); wallMat.dispose(); glassMat.dispose();

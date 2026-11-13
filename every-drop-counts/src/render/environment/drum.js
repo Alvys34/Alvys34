@@ -11,7 +11,7 @@
  */
 import { PAL, makeRng } from './palette.js';
 import { builder, rbox, cylZ, atlasPlane } from './geo.js';
-import { drumBackCanvas, drumSidesCanvas, glassCanvas, stripeTexture, toTexture } from './textures.js';
+import { drumBackCanvas, drumSidesCanvas, glassCanvas, stripeTexture, toTexture, onFontsReady } from './textures.js';
 
 export function createDrum(ctx, M, signs) {
   const { THREE, drumGroup } = ctx;
@@ -222,6 +222,12 @@ export function createDrum(ctx, M, signs) {
   hatchLamp.position.set(ow / 2 + pocket / 2, oh / 2 + bar / 2, 0.22);
   hatch.add(hatchLamp);
 
+  let alive = true;
+  onFontsReady(() => {
+    if (!alive) return;
+    backTex.image = drumBackCanvas(0.8); backTex.needsUpdate = true;
+    sideTex.image = drumSidesCanvas(0.8).canvas; sideTex.needsUpdate = true;
+  });
   const surfaces = { back, sides: sideMesh, glass, frame, HW, HH, HD };
   ctx.drumSurfaces = surfaces;
   let t = 0;
@@ -252,6 +258,7 @@ export function createDrum(ctx, M, signs) {
     },
     setQuality() {},
     dispose() {
+      alive = false;
       drumGroup.remove(root);
       if (ctx.drumSurfaces === surfaces) ctx.drumSurfaces = null;
       for (const d of disposables) if (d && d.dispose) d.dispose();

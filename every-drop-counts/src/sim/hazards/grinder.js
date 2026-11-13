@@ -31,7 +31,9 @@ export default {
   type: 'grinder',
   create(ctx, spec) {
     const { R, world, T, drum } = ctx;
-    const H = T.hazards.grinder;
+    const S = T.donor.scale ?? 1;
+    const H = { ...T.hazards.grinder };
+    H.clogMass *= S; H.chewRate *= S; // donor mass scales with donorScale: same donors-per-jam / time
     const f = wallFrame(drum, spec.wall);
     const width = spec.width ?? H.width;
     const housing = spec.housing ?? H.housing;

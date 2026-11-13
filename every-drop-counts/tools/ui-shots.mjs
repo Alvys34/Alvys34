@@ -406,7 +406,7 @@ async function screens(browser) {
     await sleep(900);
     await shot(page, `${tag}-17-hud-last10`);
     // ending sting
-    page.evaluate(() => window.__edc.ui.debug.playEnding());
+    page.evaluate(() => window.__edc.ui.debug.playEnding()).catch(() => {});
     await sleep(4200);
     await shot(page, `${tag}-18-ending-pa`);
     await page.waitForFunction(() => document.querySelector('.ending.dropping'), null, { timeout: 60000 });
@@ -448,10 +448,13 @@ async function extras(browser) {
     await page.evaluate(() => { window.setTimeout = window.__realSetTimeout; });
     check(await page.evaluate(() => document.querySelectorAll('.feed-row').length >= 2), `${tag}: bonus/fine callouts shown`);
     check(await page.evaluate(() => JSON.parse(localStorage.getItem('edc.save.v1')).achievements.SPONSOR_MATCH_8 > 0), `${tag}: achievement event persisted`);
-    page.evaluate(() => window.__edc.ui.debug.playEnding());
+    // let the CSS camera push-in actually animate (screens otherwise run with animations off)
+    await page.evaluate(() => { window.__edcHoldEnding = true; for (const st of document.querySelectorAll('style')) if (st.textContent.includes('animation:none!important')) st.remove(); });
+    page.evaluate(() => window.__edc.ui.debug.playEnding()).catch(() => {});
     await page.waitForFunction(() => document.querySelector('.ending.dropping'), null, { timeout: 120000 });
-    await sleep(1500);
+    await sleep(4500);
     await shot(page, `${tag}-19-ending-drop`);
+    await page.evaluate(() => { window.__edcHoldEnding = false; });
     reportErrors(page, `extras ${tag}`);
     await page.context().close();
   }

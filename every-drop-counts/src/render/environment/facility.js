@@ -7,7 +7,8 @@
  * createFacility(ctx, M) -> { group, tubes, beacon, update(dt, state), setQuality(q, name), dispose() }
  * Static geometry is merged per material (painted / metal / signs / walls) => ~12 draw calls.
  */
-import { PAL, makeRng, bloodColor } from './palette.js';
+import { PAL, makeRng } from './palette.js';
+import { bloodColors } from '../blood/palette.js';
 import { builder, rbox, cylZ, cylX, pipe, atlasPlane, aoPlane, aoFall } from './geo.js';
 import { facilityWallCanvas, floorCanvas, toTexture } from './textures.js';
 
@@ -130,7 +131,8 @@ export function createFacility(ctx, M, signs) {
   Mt.add(cylX(THREE, 0.06, 0.6, 8), { pos: [gaugeX - 0.2, gaugeY0 + gaugeH, gaugeZ - 0.15], color: PAL.chrome });
   const gaugeGlass = new THREE.Mesh(track(new THREE.CylinderGeometry(0.17, 0.17, gaugeH, 14, 1, true)), track(new THREE.MeshStandardMaterial({ color: 0xeaf8f6, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.2, depthWrite: false })));
   gaugeGlass.position.set(gaugeX, gaugeY0 + gaugeH / 2, gaugeZ);
-  const gaugeBloodMat = track(new THREE.MeshStandardMaterial({ color: 0xb4001c, roughness: 0.2, metalness: 0.05 }));
+  const gaugeBloodMat = track(new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.05 }));
+  gaugeBloodMat.color = bloodColors.fresh;
   const gaugeBlood = new THREE.Mesh(track(new THREE.CylinderGeometry(0.13, 0.13, 1, 12)), gaugeBloodMat);
   gaugeBlood.position.set(gaugeX, gaugeY0, gaugeZ);
   gaugeGlass.renderOrder = 2;
@@ -152,14 +154,14 @@ export function createFacility(ctx, M, signs) {
   P.add(new THREE.BoxGeometry(ow.w, ow.h, 0.2), { pos: [ow.x, ow.y, WZ + 0.2], color: 0x2a3c40 }); // dark room behind
   P.add(rbox(THREE, ow.w + 0.9, 0.22, 0.7, 0.06), { pos: [ow.x, ow.y - ow.h / 2 - 0.25, WZ + 0.35], color: PAL.cream1 });
   // blinds (half drawn) + a monitor glow inside
-  for (let i = 0; i < 9; i++) Pd.add(new THREE.BoxGeometry(ow.w - 0.1, 0.12, 0.04), { pos: [ow.x, ow.y + ow.h / 2 - 0.15 - i * 0.2, WZ + 0.36], rot: [0.5, 0, 0], color: 0xe9eee8 });
-  Pd.add(new THREE.BoxGeometry(1.2, 0.8, 0.05), { pos: [ow.x + 1.8, ow.y - 0.9, WZ + 0.32], color: 0x8fe3cc });
+  for (let i = 0; i < 9; i++) P.add(new THREE.BoxGeometry(ow.w - 0.1, 0.12, 0.04), { pos: [ow.x, ow.y + ow.h / 2 - 0.15 - i * 0.2, WZ + 0.36], rot: [0.5, 0, 0], color: 0xe9eee8 });
+  P.add(new THREE.BoxGeometry(1.2, 0.8, 0.05), { pos: [ow.x + 1.8, ow.y - 0.9, WZ + 0.32], color: 0x8fe3cc });
   Pd.add(new THREE.BoxGeometry(0.15, 0.4, 0.05), { pos: [ow.x + 1.8, ow.y - 1.45, WZ + 0.32], color: 0x34474a });
-  Pd.add(new THREE.SphereGeometry(0.42, 12, 8), { pos: [ow.x - 1.6, ow.y - 1.0, WZ + 0.3], scale: [1, 1.1, 0.4], color: 0x34474a }); // a silhouette: someone watching
-  Pd.add(new THREE.SphereGeometry(0.62, 12, 8), { pos: [ow.x - 1.6, ow.y - 1.9, WZ + 0.3], scale: [1.2, 0.8, 0.4], color: 0x34474a });
+  P.add(new THREE.SphereGeometry(0.42, 12, 8), { pos: [ow.x - 1.6, ow.y - 1.0, WZ + 0.3], scale: [1, 1.1, 0.4], color: 0x34474a }); // a silhouette: someone watching
+  P.add(new THREE.SphereGeometry(0.62, 12, 8), { pos: [ow.x - 1.6, ow.y - 1.9, WZ + 0.3], scale: [1.2, 0.8, 0.4], color: 0x34474a });
   const owGlass = new THREE.Mesh(track(new THREE.PlaneGeometry(ow.w, ow.h)), track(new THREE.MeshStandardMaterial({ color: 0x9fc4c8, transparent: true, opacity: 0.38, roughness: 0.04, metalness: 0.4, depthWrite: false })));
   owGlass.position.set(ow.x, ow.y, WZ + 0.42);
-  detail.add(owGlass);
+  group.add(owGlass);
   sign('staffOnly', 3.8, ow.x, ow.y - ow.h / 2 - 0.85, WZ + 0.06);
   sign('slogan', 8.4, -19.6, FY + 15.4, WZ + 0.06);
   sign('calm', 5.0, -19.6, FY + 13.6, WZ + 0.06);
@@ -270,7 +272,6 @@ export function createFacility(ctx, M, signs) {
   add(Pd.build(), M.painted, { parent: detail });
   add(S.build(), signs.material);
 
-  const tmpC = new THREE.Color();
   let gaugeLevel = 0;
   return {
     group, tubes,
@@ -285,8 +286,6 @@ export function createFacility(ctx, M, signs) {
       const h = Math.max(0.02, gaugeLevel * gaugeH);
       gaugeBlood.scale.y = h;
       gaugeBlood.position.y = gaugeY0 + h / 2;
-      bloodColor(ctx, tmpC);
-      if (!gaugeBloodMat.color.equals(tmpC)) gaugeBloodMat.color.copy(tmpC);
     },
     setQuality(q, name) {
       detail.visible = name !== 'low';

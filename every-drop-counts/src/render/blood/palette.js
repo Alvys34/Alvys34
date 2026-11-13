@@ -23,8 +23,8 @@ import * as THREE from 'three';
 export const BLOOD_PALETTES = {
   // fresh: glossy candy red; deep: inside the pool / thick pools; dry: oxidised stains;
   // hi: specular tint on wet blood; foam: froth / meniscus; mist: fine spray
-  red: { fresh: 0xd1001f, deep: 0x4d0008, dry: 0x5a0d0d, hi: 0xff8a8a, foam: 0xe8687a, mist: 0xa8001a },
-  green: { fresh: 0x46d11a, deep: 0x0e3d06, dry: 0x2f4a12, hi: 0xd8ffb0, foam: 0x9be27a, mist: 0x2f9a10 },
+  red: { fresh: 0xd1001f, deep: 0x4d0008, dry: 0x4a2420, hi: 0xff8a8a, foam: 0xe8687a, mist: 0xa8001a },
+  green: { fresh: 0x46d11a, deep: 0x0e3d06, dry: 0x34402a, hi: 0xd8ffb0, foam: 0x9be27a, mist: 0x2f9a10 },
 };
 
 const KEYS = ['fresh', 'deep', 'dry', 'hi', 'foam', 'mist'];

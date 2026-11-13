@@ -29,6 +29,7 @@ export default {
   create(ctx, spec) {
     const { R, world, T, drum } = ctx;
     const H = { ...T.hazards.crusher, ...(spec.tune || {}) };
+    H.gap *= T.donor.scale ?? 1; // bigger donors: leave them room to lie flat under the plate
     const f = wallFrame(drum, spec.wall);
     const width = spec.width ?? H.width;
     const half = width / 2;

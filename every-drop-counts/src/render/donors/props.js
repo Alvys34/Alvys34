@@ -37,7 +37,7 @@ export function createPropViews(ctx) {
   const shards = new THREE.InstancedMesh(shardGeo, shardMat, MAX_SHARDS);
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.setColorAt(0, new THREE.Color(1, 1, 1));
-  shards.frustumCulled = false; shards.count = 0;
+  shards.frustumCulled = false; shards.count = 0; shards.name = 'prop-shards';
   root.add(shards);
   const S = { x: new Float32Array(MAX_SHARDS), y: new Float32Array(MAX_SHARDS), z: new Float32Array(MAX_SHARDS),
     vx: new Float32Array(MAX_SHARDS), vy: new Float32Array(MAX_SHARDS), vz: new Float32Array(MAX_SHARDS),
@@ -221,7 +221,7 @@ function buildTank(ctx, view, kit) {
     onRemove(v) {
       if (v && v.state === 'exploded') {
         const p = group.position;
-        kit.burst(p.x, p.y, p.z, 26, 9, 0.09, [PAL.mint3, 0xf7f8f6, PAL.steel, PAL.hazard]);
+        kit.burst(p.x, p.y, p.z, 40, 8, 0.16, [PAL.mint4, PAL.gunmetal, PAL.hazard, PAL.mint3, PAL.iron]);
       }
     },
     dispose() { jetMat.dispose(); jetGeo.dispose(); glowMat.dispose(); glow.geometry.dispose(); void last; },

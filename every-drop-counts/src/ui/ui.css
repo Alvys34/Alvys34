@@ -460,7 +460,8 @@ body[data-layout='modal'] .scr.side.on { opacity: 1; }
 
 /* toasts */
 .toasts { position: absolute; right: var(--safe); top: var(--safe); display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; z-index: 5; }
-body[data-mode='playing'] .toasts { top: calc(var(--safe) + 8.6rem); }
+body[data-mode='playing'] .toasts { top: calc(var(--safe) + 17.6rem); } /* below the clock plate and the Sponsor Match stamp */
+body[data-mode='ending'] .toasts { display: none; }
 .toast { display: flex; align-items: center; gap: 0.6rem; background: var(--white); border-radius: 0.9rem; padding: 0.5rem 1rem 0.5rem 0.5rem; box-shadow: var(--shadow);
   transform: translateX(calc(100% + 2rem)); transition: transform 0.35s var(--ease); max-width: 22rem; border: 0.13rem solid var(--mint); }
 .toast.in { transform: none; }

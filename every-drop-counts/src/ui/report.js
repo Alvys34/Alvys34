@@ -305,6 +305,7 @@ export function createReports(app) {
       ending.el.classList.add('dropping');
       app.dropCamera();
       if (!(await wait(3600))) return;
+      while (window.__edcHoldEnding && !tok.skip) await sleep(100); // screenshot tooling only
       ending.el.classList.add('dark');
       await wait(1400);
     },

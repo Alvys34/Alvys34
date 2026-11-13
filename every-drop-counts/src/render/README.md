@@ -64,8 +64,11 @@ off (several passes per frame); `view.info()` covers the whole frame.
 * Files: `environment/{index,palette,textures,geo,lighting,facility,drum}.js`, `donors/{index,bodyparts,material,looks,faces,hazards,props}.js`.
   `donors/props.js` exports `createPropViews` (wired in `index.js`, replaces `placeholders/`); `PROP_BUILDERS[kind]`
   and `HAZARD_BUILDERS[kind]` (`(ctx, view, kit) => { group, update(view, dt, …), dispose? }`) are the extension points.
-* Palette: `environment/palette.js` `PAL`/`CSS`/`DONOR_PAL` — no reds. Anything blood-coloured goes through
-  `bloodColor(ctx, out, which?)`, which reads VFX's `blood/palette.js bloodColors` (red / streamer-green).
+* Palette: `environment/palette.js` `PAL`/`CSS`/`DONOR_PAL` — no reds. Anything blood-coloured (stump caps, wound
+  cores, spike tips, stained blades, tank gauge, Thin-Blood band) uses VFX's live `blood/palette.js bloodColors.fresh`
+  object directly (`material.color = bloodColors.fresh`), so red / streamer-green recolours it.
+* Canvas text uses the bundled UI font (`'Nunito Variable'`, @fontsource) via `textures.js FONT`; atlases are redrawn
+  once `document.fonts` has loaded it (`onFontsReady`), system fonts are only a first-frame fallback.
 * Shared on ctx: `ctx.artMaterials` (shared metal/paint materials), `ctx.artSigns` (signage atlas `{texture, material, rects}`),
   `ctx.drumSurfaces = { back, sides, glass, frame, HW, HH, HD }` (drum meshes; the back wall's map is ART's tile canvas —
   overlay blood, don't replace the map), `ctx.environment.emergency` (0..1 escalation actually shown by the lights),
@@ -74,5 +77,6 @@ off (several passes per frame); `view.info()` covers the whole frame.
   failing fluorescent tubes, rotating beacon spot from ~45 % fill). All lights always exist (intensity 0 when off).
 * Donors: one InstancedMesh per role + one per hairstyle/hat + stump caps + bone nubs; per-instance colour slots
   (gown/skin/trim/feet/band/hair/arm/leg/lower/accent), face atlas cell (smile, blink, worried, hurt, drown, dead),
-  wound/drain state. Looks are resolved from `donor.type` + `donor.look` (`outfit: 'gown'|'suit'|'staff'`, `accessory`).
+  wound/drain state, a rim light (alive donors) and an inverted-hull outline mesh per role (shares the instance
+  matrices). Visual sizes follow each part's sim shape per axis (fixed reference sizes in `donors/index.js REF`). Looks are resolved from `donor.type` + `donor.look` (`outfit: 'gown'|'suit'|'staff'`, `accessory`).
 * Quality: `low` = no shadows, facility detail props hidden; `medium/high` shadow map 1024/2048 (PCF radius 2.5/3.5).

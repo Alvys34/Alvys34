@@ -44,6 +44,12 @@ export const TUNABLES = {
   },
 
   donor: {
+    // DONOR SCALE (orchestrator request: donors read too small on screen). Uniform size multiplier
+    // for every donor type's body plan (shapes, joint anchors, spawn height). Mass scales linearly
+    // (impact / crush mass references scale with it, so damage per hit is unchanged), blood litres do
+    // NOT (litres are the balance currency). Grinder clog/chew, crusher gap, safety-sphere size and
+    // hatch clearance follow it. Renderers read part sizes from the sim.
+    scale: 1.35,
     // part table: hp, blood share, mass (kg). Shares sum to 1.
     parts: {
       head:     { hp: 60,  share: 0.08, mass: 5.0 },

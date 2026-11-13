@@ -19,6 +19,7 @@
  */
 import { bloodUniforms } from './blood/palette.js';
 import { TUNABLES } from '../core/tunables.js';
+import { floatTargetsOK } from './quality.js';
 
 const VS = 'varying vec2 vUv; void main(){ vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
@@ -30,6 +31,25 @@ export function createPost(ctx) {
   let rtScene = null;
   const bloom = []; // render targets, level 0 = 1/2 res
   let bloomLevels = 0; let msaa = 0;
+
+  // Robustness: without float render targets, render straight to the screen with three's own ACES
+  // (no bloom/grade/accents) instead of failing; MSAA is clamped to what the GPU offers.
+  const FLOAT_OK = floatTargetsOK(renderer);
+  const maxSamples = (renderer.capabilities && renderer.capabilities.maxSamples) || 0;
+  let lost = false;
+  const canvas = renderer.domElement;
+  const onLost = (e) => {
+    e.preventDefault(); lost = true; ctx.contextLost = true;
+    disposeTargets(); W = 0; H = 0; // release now (no-op on a lost context); rebuilt lazily after restore
+  };
+  const onRestored = () => {
+    lost = false; ctx.contextLost = false;
+    if (ctx.blood && ctx.blood.atlas) ctx.blood.atlas.clear(); // stains are gone with the context
+  };
+  if (canvas && canvas.addEventListener) {
+    canvas.addEventListener('webglcontextlost', onLost, false);
+    canvas.addEventListener('webglcontextrestored', onRestored, false);
+  }
 
   const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const fsScene = new THREE.Scene();
@@ -106,7 +126,7 @@ export function createPost(ctx) {
       vec2 uv = vUv; vec2 d = uv - 0.5;
       vec3 col;
       if (uCA > 0.0001) {
-        vec2 o = d * uCA;
+        vec2 o = d * dot(d, d) * 4.0 * uCA; // none at the centre, a hint at the edges
         col = vec3(texture2D(tScene, uv + o).r, texture2D(tScene, uv).g, texture2D(tScene, uv - o).b);
       } else {
         col = texture2D(tScene, uv).rgb;
@@ -127,11 +147,11 @@ export function createPost(ctx) {
       float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
       // grade: clinical cool -> sickly, red-shifted with fill
       float f = smoothstep(0.04, 0.9, uFill);
-      vec3 wb = mix(vec3(0.965, 1.0, 1.045), vec3(1.05, 0.99, 0.87), f);
+      vec3 wb = mix(vec3(0.97, 1.0, 1.04), vec3(1.03, 0.99, 0.95), f);
       col *= wb;
-      col = mix(vec3(lum), col, mix(1.04, 0.9, f) + bl * (0.12 + 0.1 * f));
-      col.r += lum * 0.04 * f;
-      col = max(col - vec3(0.004 * f), 0.0) * (1.0 + 0.05 * f); // a touch of crush/contrast as it gets grim
+      col = mix(vec3(lum), col, mix(1.04, 0.97, f) + bl * (0.12 + 0.12 * f));
+      col.r += lum * 0.02 * f;
+      col = max(col - vec3(0.003 * f), 0.0) * (1.0 + 0.04 * f); // keep it crisp: slight contrast, no mud
       // accents: desaturate everything except blood
       col = mix(col, vec3(lum) * vec3(1.0, 1.0, 1.04), uDesat * (1.0 - bl));
       col *= uExposure;
@@ -141,7 +161,7 @@ export function createPost(ctx) {
       float vig = smoothstep(0.55, 1.45, r);
       col *= 1.0 - uVignette * vig;
       vec3 edgeRed = uBloodFresh * 0.6 + vec3(0.06, 0.0, 0.0);
-      col = mix(col, edgeRed, clamp(vig * (uRedEdge + 0.22 * f * f), 0.0, 0.85));
+      col = mix(col, edgeRed, clamp(vig * (uRedEdge + 0.12 * f * f), 0.0, 0.85));
       vec4 o = sRGBTransferOETF(vec4(clamp(col, 0.0, 1.0), 1.0));
       float g = hash(uv * uRes + fract(uTime * 7.13) * 91.7) - 0.5;
       o.rgb += g * uGrain;
@@ -158,7 +178,7 @@ export function createPost(ctx) {
   function build() {
     renderer.getDrawingBufferSize(size);
     const w = Math.max(1, size.x | 0); const h = Math.max(1, size.y | 0);
-    const wantMsaa = q.msaa | 0; const wantBloom = q.bloom | 0;
+    const wantMsaa = Math.min(q.msaa | 0, maxSamples); const wantBloom = q.bloom | 0;
     if (rtScene && w === W && h === H && wantMsaa === msaa && wantBloom === bloomLevels) return;
     disposeTargets();
     W = w; H = h; msaa = wantMsaa; bloomLevels = wantBloom;
@@ -224,6 +244,8 @@ export function createPost(ctx) {
     radial = Math.max(0, radial - real / 0.45);
     if (slowLeft > 0) { slowLeft -= real; slow = Math.min(1, slow + real / 0.08); } else slow = Math.max(0, slow - real / 0.25);
 
+    if (lost) return;
+    if (!FLOAT_OK) { renderer.setRenderTarget(null); renderer.render(scene, camera); return; }
     build();
     renderer.setRenderTarget(rtScene);
     renderer.render(scene, camera);
@@ -251,9 +273,9 @@ export function createPost(ctx) {
     U.uBloom.value = useBloom ? 0.32 + 0.12 * f : 0;
     U.uTime.value = time;
     U.uFill.value = f;
-    U.uVignette.value = 0.2 + 0.3 * f + 0.1 * flash + 0.12 * slow;
-    U.uCA.value = q.ca ? 0.001 + 0.0045 * f * f + 0.002 * flash + 0.002 * radial : 0;
-    U.uGrain.value = q.grain === false ? 0 : 0.012 + 0.04 * f;
+    U.uVignette.value = 0.2 + 0.22 * f + 0.1 * flash + 0.12 * slow;
+    U.uCA.value = q.ca ? 0.002 * f * f + 0.003 * flash + 0.002 * radial : 0;
+    U.uGrain.value = q.grain === false ? 0 : 0.01 + 0.018 * f;
     U.uFlash.value = flash;
     U.uRedEdge.value = 0.55 * flash * flash;
     U.uDesat.value = Math.min(1, 0.85 * slow + 0.7 * hit);
@@ -264,11 +286,12 @@ export function createPost(ctx) {
 
   return {
     render,
-    resize() { build(); },
-    setQuality(qq) { q = qq; build(); },
-    stats() { return { size: [W, H], msaa, bloomLevels, passes: 2 + (bloomLevels > 0 ? bloomLevels * 2 : 0) }; },
+    resize() { if (FLOAT_OK) build(); },
+    setQuality(qq) { q = qq; if (FLOAT_OK) build(); },
+    stats() { return { size: [W, H], msaa, bloomLevels, floatTargets: FLOAT_OK, contextLost: lost, passes: FLOAT_OK ? 2 + (bloomLevels > 0 ? bloomLevels * 2 : 0) : 1 }; },
     dispose() {
       offs.forEach((o) => o());
+      if (canvas && canvas.removeEventListener) { canvas.removeEventListener('webglcontextlost', onLost); canvas.removeEventListener('webglcontextrestored', onRestored); }
       disposeTargets();
       fsGeo.dispose(); prefilter.dispose(); down.dispose(); up.dispose(); composite.dispose();
     },

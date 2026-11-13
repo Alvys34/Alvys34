@@ -71,7 +71,7 @@ export function resolveLook(donor) {
   } else if (type === 'inspector' || outfit === 'suit') {
     look = {
       ...look, cloth: D.suit, trim: D.shirt, accent: D.tie, arm: D.suit, leg: D.suitDark, lower: D.suitDark,
-      feet: D.shoe, band: D.suit, hair: D.hardhat, hairStyle: HAIR.HARDHAT, pattern: 0,
+      feet: D.shoe, band: D.suit, hair: D.hardhat, hairStyle: HAIR.HARDHAT, pattern: 0, hem: D.suitDark,
     };
     headScale = 1.0;
   } else if (!(type in KNOWN)) {
@@ -97,10 +97,10 @@ export function resolveLook(donor) {
   const cols = new Float32Array([
     look.cloth, look.skin, look.trim, look.feet,
     look.band, look.hair, look.arm, look.leg,
-    look.lower, look.accent, look.hairStyle, look.pattern,
+    look.lower, look.accent, look.hem ?? look.trim, look.pattern,
   ]);
   return {
-    cols,
+    cols, hairStyle: look.hairStyle,
     girth: {
       chest: big ? 1.2 : girthTorso, pelvis: big ? 1.24 : girthTorso, upperArm: big ? 1.15 : girthLimb,
       forearm: big ? 1.1 : girthLimb, thigh: big ? 1.2 : girthLimb, shin: big ? 1.08 : 1,

@@ -25,7 +25,9 @@ export default {
   type: 'safetySphere',
   create(ctx, spec) {
     const { R, world, T, rng } = ctx;
-    const P = T.props.safetySphere;
+    const S = T.donor.scale ?? 1;
+    const P = { ...T.props.safetySphere };
+    P.radius *= S; P.mass *= S; // holds a donorScale-sized Inspector
     const donor = spec.donor;
     const [x, y, z] = spec.pos || [0, 0, 0];
     const v = spec.vel || [0, 0, 0];
@@ -132,11 +134,11 @@ function poseInside(ctx, donor, d, first = false) {
   const h = (-th + sway) / 2;
   const q = { x: 0, y: 0, z: Math.sin(h), w: Math.cos(h) };
   const cs = Math.cos(sway); const sn = Math.sin(sway);
-  for (const pd of donor.def.plan.parts) {
+  for (const pd of (donor.plan || donor.def.plan).parts) {
     const p = donor.parts[pd.name];
     if (!p || p.removed) continue;
     // plan-local offset from the body middle, rotated by the sway then the drum
-    let ox = pd.pos[0]; let oy = pd.pos[1] - UP_OFFSET * (donor.def.scale || 1);
+    let ox = pd.pos[0]; let oy = pd.pos[1] - UP_OFFSET * (donor.look.scale || 1);
     const sx = ox * cs - oy * sn; const sy = ox * sn + oy * cs;
     ox = sx * c - sy * s; oy = sx * s + sy * c;
     if (first) { p.px = d.x + ox; p.py = d.y + oy; p.pz = d.z + pd.pos[2]; p.pqx = q.x; p.pqy = q.y; p.pqz = q.z; p.pqw = q.w; } else {

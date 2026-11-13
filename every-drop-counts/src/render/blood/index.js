@@ -135,9 +135,9 @@ export function createBlood(ctx) {
         return;
       }
       const e = 1 + Math.min(1.5, (vt / (Math.abs(vn) + 2.5)) * 0.6);
-      const R = size * (2.4 + Math.min(2.4, speed * 0.17)) * (0.75 + rnd() * 0.5);
+      const R = size * (2.4 + Math.min(2.4, speed * 0.17)) * (0.45 + rnd() * rnd() * 1.6);
       const se = Math.sqrt(e);
-      atlas.stamp(surf, a, b, da, db, R * se, R / se, 1.15, 0, 1, rnd());
+      atlas.stamp(surf, a + (rnd() - 0.5) * R * 0.5, b + (rnd() - 0.5) * R * 0.5, da, db, R * se, R / se, 0.8 + rnd() * 0.7, 0, 1, rnd());
       if (speed > 4.5 && size > 0.035) {
         const ns = Math.min(6, Math.floor(rnd() * speed * 0.55));
         for (let k = 0; k < ns; k++) {
@@ -337,7 +337,6 @@ export function createBlood(ctx) {
       const h = ux * pcX[i] + uy * pcY[i];
       if (hasPool && h < level - 0.05) {
         wetP[i] = 1;
-        if (doTide && rnd() < 0.5) atlas.stamp(pcS[i], pcA[i] + (rnd() - 0.5) * 0.6, HD, 1, 0, 1.1, HD, 0.04, 3, 0.4, rnd());
         continue;
       }
       let w = wetP[i];
@@ -374,7 +373,6 @@ export function createBlood(ctx) {
               const lx = x + depth * ux; const ly = y + depth * uy;
               if (lx > -HW && lx < HW && ly > -HH && ly < HH) {
                 atlas.stamp(SURF.BACK, lx + HW, ly + HH, c, -s, 0.75, 0.07, 0.10, 3, 0.4, rnd());
-                if (rnd() < 0.25) atlas.stamp(SURF.GLASS, lx + HW, ly + HH, c, -s, 0.7, 0.05, 0.06, 3, 0.4, rnd());
               }
             }
             if (rnd() < 0.3) atlas.stamp(SURF.BACK, gx + rnd(), gy + rnd(), 1, 0, 1.3, 1.3, 0.02, 3, 0.2, rnd());
@@ -480,7 +478,7 @@ export function createBlood(ctx) {
       let simDt = lastSimTime < 0 ? 0 : state.time - lastSimTime;
       lastSimTime = state.time;
       if (!(simDt > 0)) simDt = 0; else if (simDt > 5) simDt = 5;
-      atlas.flush(simDt);
+      if (ctx.contextLost) atlas.clear(); else atlas.flush(simDt); // lost context: drop the batch, repaint from clean after restore
     },
     onLevel() {
       drops.clear(); mist.clear(); runners.clear(); atlas.clear();
