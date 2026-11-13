@@ -171,7 +171,8 @@ export function loadSave() {
     }
   }
   cache = sanitizeSave(migrate(raw));
-  if (saveInfo.status !== 'loaded') writeSave();
+  // persist the sanitised/migrated form so bad values never survive a second load
+  if (saveInfo.status !== 'loaded' || JSON.stringify(cache) !== text) writeSave();
   return cache;
 }
 

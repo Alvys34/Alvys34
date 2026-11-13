@@ -144,7 +144,9 @@ function poseInside(ctx, donor, d, first = false) {
     if (first) { p.px = d.x + ox; p.py = d.y + oy; p.pz = d.z + pd.pos[2]; p.pqx = q.x; p.pqy = q.y; p.pqz = q.z; p.pqw = q.w; } else {
       p.px = p.x; p.py = p.y; p.pz = p.z; p.pqx = p.qx; p.pqy = p.qy; p.pqz = p.qz; p.pqw = p.qw;
     }
-    p.x = d.x + ox; p.y = d.y + oy; p.z = d.z + pd.pos[2];
+    // clamp inside the drum (the ball can be shoved against a wall; never pose limbs into it)
+    const lx = ctx.drum.hw - 0.08; const ly = ctx.drum.hh - 0.08; const lz = ctx.drum.hd - 0.08;
+    p.x = Math.max(-lx, Math.min(lx, d.x + ox)); p.y = Math.max(-ly, Math.min(ly, d.y + oy)); p.z = Math.max(-lz, Math.min(lz, d.z + pd.pos[2]));
     p.qx = q.x; p.qy = q.y; p.qz = q.z; p.qw = q.w;
     p.vx = d.vx; p.vy = d.vy; p.vz = d.vz;
   }

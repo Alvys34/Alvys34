@@ -19,7 +19,9 @@ sim.audioState()             // { fill, drumOmega, aliveCount, sawLoad, grinderL
 
 Run a whole shift in Node: `node tools/simbot.mjs --level 2 --policy smart` (policies in
 `tools/policies.mjs`: idle spin rock tumble slamSpam flipper rockAim park smart), the full matrix:
-`node tools/botmatrix.mjs`, one run's death causes / damage sources: `node tools/simdiag.mjs 3 smart`.
+`node tools/botmatrix.mjs`, one run's death causes / damage sources: `node tools/simdiag.mjs 3 smart`,
+step-time windows: `node tools/perf.mjs overtime smart`, screenshots when Playwright's screenshot
+times out under software WebGL: `node tools/canvas-shot.mjs 5174 tools/out 7:240 5:220`.
 Tests: `npm test`.
 
 ## Frames and units
@@ -201,6 +203,14 @@ dissolved }`. `donorsLeft` excludes Inspectors.
 
 Levels (`listLevels()`): `{ id, number, name, subtitle, lesson, quota, duration, variant }`.
 Shift 8 has `variant: 'staff'` (donor outfits) and `ending`.
+
+## Donor scale
+
+`T.donor.scale` (default 1.35, orchestrator request so faces read on screen) uniformly scales every
+donor type's body plan at spawn (`donor.plan`, `donor.sizeScale`, `look.scale` = type scale × donor
+scale). Mass scales linearly; impact/crush mass references, grinder clog mass + chew rate, crusher
+gap, safety-sphere radius/mass, hatch clearance and alive-behaviour torques follow it. Blood litres
+do not change. Hazard reach uses each part's own `thick`, so it follows automatically.
 
 ## Damage & yield model (CONTENT balance pass)
 

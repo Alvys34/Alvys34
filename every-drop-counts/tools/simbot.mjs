@@ -50,8 +50,8 @@ export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds 
       bodies++;
       const sp = Math.hypot(d.vx, d.vy, d.vz);
       if (sp > maxSpeed) maxSpeed = sp;
-      if (Math.abs(d.x) > c.drum.hw + 0.6 || Math.abs(d.y) > c.drum.hh + 0.6 || Math.abs(d.z) > c.drum.hd + 0.6) {
-        if (escapes.length < 5) escapes.push({ t: c.time, uid: d.uid, x: d.x, y: d.y, z: d.z });
+      if (!d.encased && Math.abs(d.x) > c.drum.hw + 0.6 || Math.abs(d.y) > c.drum.hh + 0.6 || Math.abs(d.z) > c.drum.hd + 0.6) {
+        if (escapes.length < 5) escapes.push({ t: +c.time.toFixed(2), kind: d.kind, what: d.kind === 'part' ? d.donor.type + ':' + d.name : (d.owner && d.owner.view && d.owner.view.kind), x: +d.x.toFixed(2), y: +d.y.toFixed(2), z: +d.z.toFixed(2) });
       }
     }
     if (bodies > peakBodies) peakBodies = bodies;
@@ -75,7 +75,7 @@ export async function runBot({ level = 1, policy = 'idle', seed = 1, maxSeconds 
     collected: snap.collected, bonus: snap.bonus, donorBlood: snap.donorBloodTotal,
     kills: snap.kills, drownings: snap.drownings, severs: counters.sever, alive: snap.alive,
     time: snap.time, peakBodies, stepMsMean: +(sum / n).toFixed(3), stepMsMax: +max.toFixed(2),
-    maxSpeed: +maxSpeed.toFixed(1), escapes: escapes.length, causes: snap.result ? snap.result.causes : null,
+    maxSpeed: +maxSpeed.toFixed(1), escapes: escapes.length, escapeSamples: escapes, causes: snap.result ? snap.result.causes : null,
     maxIdle: +maxIdle.toFixed(1), fillHalf: fillHalf == null ? null : +fillHalf.toFixed(2), peakFill: +peakFill.toFixed(2),
     fines: snap.fines, inspectorDeaths: snap.result ? snap.result.inspectorDeaths : null,
     overtime: overtime ? { drainRate: sim.ctx.mode.drainRate, waves: sim.ctx.mode.waves.opened } : undefined,

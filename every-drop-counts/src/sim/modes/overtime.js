@@ -27,25 +27,25 @@ export const OVERTIME_LEVEL = {
   duration: Infinity,
   capacity: 150,
   quota: [0, 0, 0],
-  hatch: { wall: 'back', x: 5.2, y: 1.2, offset: 1.2 }, // over bare floor: idle must not get free yield
+  startAngle: Math.PI, // like shifts 2-8: land on the bare face, machinery overhead (rock-proof rule)
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'spikes', wall: 'floor', from: -1.8, to: 2.8, z: [-2.5, 2.5] },
-    { type: 'saw', wall: 'left', at: -2.2, z: [-2.5, 0.6], radius: 1.1, dir: 1 },
-    { type: 'grinder', wall: 'right', at: 0.4, width: 2.4, z: [-2.2, 2.2] },
-    { type: 'crusher', wall: 'ceiling', at: -5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
-    { type: 'railSaw', wall: 'ceiling', from: -1.5, to: 5.0, z: [-2.5, 2.5], radius: 1.0, period: 7 },
+    { type: 'grinder', wall: 'floor', at: -1.4, width: 2.4, z: [-2.2, 2.2] },
+    { type: 'spikes', wall: 'floor', from: 0.6, to: 3.4, z: [-2.5, 2.5] },
+    { type: 'crusher', wall: 'floor', at: -5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
+    { type: 'railSaw', wall: 'floor', from: 4.2, to: 6.4, z: [-2.5, 2.5], radius: 0.9, period: 4.5 },
   ],
   waves: [],
   overtime: {
     startVolume: 32,       // L in the tank at the start
     grace: 22,             // s before the pump starts (first wave lands, player gets going)
     drainBase: 0.32,       // L/s when the pump starts
-    drainGrowth: 0.0042,   // L/s added per second of overtime after the grace period
+    drainGrowth: 0.0165,   // L/s added per second after the grace period (~3 L/s at 3 min, ~6 at 6 min)
     drainPerWave: 0.02,    // L/s added per wave opened
     firstWaveAt: 1.5,
     waveEvery: [19, 9],    // s between waves: start -> minimum
     waveEveryRamp: 300,    // s to go from the first to the second
-    waveCount: [4, 10],    // donors per wave: start -> maximum (+1 every `countEvery` waves)
+    waveCount: [4, 8],     // donors per wave: start -> maximum (8: donors are 1.35x, keeps peak bodies / sim cost down) (+1 every `countEvery` waves)
     countEvery: 2,
     // wave index at which each type joins, and its share of later waves
     mix: [

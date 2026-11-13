@@ -199,8 +199,9 @@ async function overtime(browser) {
   await key(page, 'Enter', 700);
   check((await state(page)).levelId === 'overtime', 'Overtime running');
   await page.evaluate(() => window.__edc.setTimeScale(0));
-  for (let i = 0; i < 40; i++) {
-    const st = await page.evaluate(() => { window.__edc.step(300, false); return window.__edc.getState(); });
+  for (let i = 0; i < 80; i++) {
+    // a lazy operator: rocks for the first minute (a few litres reach the tank), then gives up
+    const st = await page.evaluate((k) => { window.__edc.setInput(k < 12 ? { rotate: k % 2 ? 1 : -1, slam: true } : null); window.__edc.step(300, false); return window.__edc.getState(); }, i);
     if (st.status === 'ended') break;
   }
   await page.waitForFunction(() => window.__edc.getState().screen === 'results', null, { timeout: 240000 });

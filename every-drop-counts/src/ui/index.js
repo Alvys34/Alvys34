@@ -280,7 +280,9 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       commitStats();
       if (run.overtime) {
         const qualifies = overtimeQualifies(r.liters);
-        const rec = recordOvertime(r.liters, { time: r.time || (snap && snap.clock.t) || 0 });
+        // only runs that make the local top-10 are entered (a 0 L run never takes a slot)
+        const rec = qualifies ? recordOvertime(r.liters, { time: r.time || (snap && snap.clock.t) || 0 }) : { rank: -1, entry: null };
+        if (!qualifies) addStats({ overtimeRuns: 1, litersTotal: Math.max(0, r.liters || 0) });
         run.record = { ...rec, qualifies: qualifies && rec.rank >= 0 };
       } else {
         const otBefore = app.overtimeUnlocked();
