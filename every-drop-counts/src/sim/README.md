@@ -114,6 +114,22 @@ Copy `levels/shift1.js` (format documented at the top), then add one import + on
 `registerLevel()` line in `levels/index.js`. Per-level tunable overrides go in `tunables: {}`.
 Balance with the bots: `idle` must fail, `spin` (careless) ≈ 1 drop, `smart`/`rock` can reach 3.
 
+### Level-design rules from the balance pass (read before adding a shift)
+
+* **Mindless mashing parks a SIDE wall at the bottom.** Alternating full left/right from rest drifts
+  the drum to oscillate around ±2 rad (±115°), so the crowd lives on one side wall and its corners.
+  Hazards on side walls / near corners get farmed by button-mashing. The money hazards therefore sit
+  in the MIDDLE of a face, and the crowd should never rest across that middle at the start.
+* Shifts 2–8 start upside down (`startAngle: Math.PI`, hatch `{ wall: 'back', x: 0, y: -1 }`): the
+  crowd lands on the bare 'ceiling' face, the machinery is overhead on the 'floor' face. Reaching it
+  needs a deliberate half-turn plus controlled tilting, or a flip (drop them 10 m onto it).
+* Spikes only hurt what FALLS on them (`minSpeed` 5, impale 10 m/s), so sliding across a bed is
+  safe — a bed is the most rock-proof hazard. Saws, grinders and rail saws cut whatever slides past.
+* Idle must earn 0: the landing spot must be bare and out of every blade's reach (standing donors
+  are ~1.8 m tall).
+* Quotas: q3 ≈ what `smart` reaches, q1 ≈ what a careless player scrapes on shifts 1–3. Check
+  every change with `node tools/botmatrix.mjs` (all policies, ≥ 2 seeds).
+
 ## Adding a mode
 
 `modes/shift.js` and `modes/overtime.js` implement

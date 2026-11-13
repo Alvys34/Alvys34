@@ -3,6 +3,11 @@
  * (level.variant = 'staff' -> donor.look.outfit = 'staff'). Ending sting after the report:
  * shift:end payload `ending` = { pa, mood, next: 'credits' } when the shift is passed (>= 1 drop);
  * UI plays the PA line, drops the camera into the drum, then rolls credits.
+ * Orientation (shifts 2-8): the drum STARTS UPSIDE DOWN (startAngle = pi). Donors land on the bare
+ * 'ceiling' face; the machinery sits overhead in the middle of the 'floor' face. Reaching it takes a
+ * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
+ * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
+ * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
  */
 export default {
   id: 'shift-8',
@@ -16,14 +21,14 @@ export default {
   duration: 150,
   capacity: 160,
   quota: [55, 110, 155],
-  startAngle: 0,
-  hatch: { wall: 'back', x: -5.8, y: 1.0, offset: 1.2 },
+  startAngle: Math.PI,
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'grinder', wall: 'floor', at: -1.6, width: 2.4, z: [-2.2, 2.2] },
-    { type: 'spikes', wall: 'floor', from: 0.4, to: 3.0, z: [-2.5, 2.5] },
-    { type: 'crusher', wall: 'ceiling', at: 5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
-    { type: 'railSaw', wall: 'ceiling', from: -5.0, to: 2.0, z: [-2.5, 2.5], radius: 1.0, period: 6.5 },
-    { type: 'saw', wall: 'right', at: 1.0, z: [-2.5, 0.5], radius: 1.1, dir: -1 },
+    { type: 'grinder', wall: 'floor', at: -1.4, width: 2.4, z: [-2.2, 2.2] },
+    { type: 'spikes', wall: 'floor', from: 0.6, to: 3.2, z: [-2.5, 2.5] },
+    { type: 'crusher', wall: 'floor', at: 5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
+    { type: 'railSaw', wall: 'ceiling', from: -5.6, to: -3.0, z: [-2.5, 2.5], radius: 0.95, period: 4.5 },
+    { type: 'saw', wall: 'right', at: -1.0, z: [-2.5, 0.5], radius: 1.0, dir: -1 },
   ],
   waves: [
     { at: 1.5, count: 6, types: { standard: 4, thinBlood: 2 }, props: [{ type: 'oxygenTank', count: 1 }] },

@@ -1,12 +1,12 @@
 /**
- * Shift 2 — "Sharp Objects". Wall saws + ceiling spikes. Teaches SLAM.
- * Layout: donors land on the bare left end of the floor. A saw gang is bolted to the floor right of
- * centre (tilt the crowd over to it; a SLAM bounces them back down onto the blades) and a second,
- * smaller one sits further right. The ceiling spike bed is out of reach early; as the tank fills the
- * floating crowd rises toward it and slams start reaching it (second half) — or flip them onto it.
- * Design rule (all shifts): the money hazards sit on the floor / ceiling middles, which mindless
- * left-right mashing never brings down (it parks a SIDE wall at the bottom).
- * Format: see shift1.js.
+ * Shift 2 — "Sharp Objects". Saws + a spike bed. Teaches SLAM.
+ * Orientation (shifts 2-8): the drum STARTS UPSIDE DOWN (startAngle = pi). Donors land on the bare
+ * 'ceiling' face; the machinery sits overhead in the middle of the 'floor' face. Reaching it takes a
+ * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
+ * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
+ * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
+ * Layout: overhead, a spike bed between two saw gangs (each covering part of the depth). Once the
+ * crowd is down on that face, a SLAM bounces them up and back down onto the bed / into the blades.
  */
 export default {
   id: 'shift-2',
@@ -17,12 +17,12 @@ export default {
   duration: 125,
   capacity: 130,
   quota: [26, 55, 80],
-  startAngle: 0,
-  hatch: { wall: 'back', x: -4.6, y: 1.0, offset: 1.2 },
+  startAngle: Math.PI,
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'saw', wall: 'floor', at: 0.6, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
-    { type: 'saw', wall: 'floor', at: 4.4, z: [-2.5, 0.2], radius: 0.95, dir: 1 },
-    { type: 'spikes', wall: 'ceiling', from: -3.5, to: 3.5, z: [-2.5, 2.5] },
+    { type: 'spikes', wall: 'floor', from: -1.3, to: 1.3, z: [-2.5, 2.5] },
+    { type: 'saw', wall: 'floor', at: -3.3, z: [-2.5, 0.4], radius: 1.05, dir: 1 },
+    { type: 'saw', wall: 'floor', at: 3.3, z: [-0.4, 2.5], radius: 1.05, dir: -1 },
   ],
   waves: [
     { at: 1.5, count: 5 },

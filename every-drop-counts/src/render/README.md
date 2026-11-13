@@ -58,3 +58,21 @@ off (several passes per frame); `view.info()` covers the whole frame.
 * `ctx.poolFx` (pool → blood): `{ wave, level, on, impulse(xw,a), addFoam(xw,a), ring(xw,z,amp) }`;
   `ctx.blood.emitLocal(x,y,z,vx,vy,vz,size,life,kind,mist)` spawns blood particles (drum-local).
 * Tools: `tools/vfxshot.mjs` (canvas capture, stops the RAF loop; for slow SwiftShader), `tools/scripts/vfx-*.json`.
+
+## ART (environment, donors, hazards, props) — interfaces
+
+* Files: `environment/{index,palette,textures,geo,lighting,facility,drum}.js`, `donors/{index,bodyparts,material,looks,faces,hazards,props}.js`.
+  `donors/props.js` exports `createPropViews` (wired in `index.js`, replaces `placeholders/`); `PROP_BUILDERS[kind]`
+  and `HAZARD_BUILDERS[kind]` (`(ctx, view, kit) => { group, update(view, dt, …), dispose? }`) are the extension points.
+* Palette: `environment/palette.js` `PAL`/`CSS`/`DONOR_PAL` — no reds. Anything blood-coloured goes through
+  `bloodColor(ctx, out, which?)`, which reads VFX's `blood/palette.js bloodColors` (red / streamer-green).
+* Shared on ctx: `ctx.artMaterials` (shared metal/paint materials), `ctx.artSigns` (signage atlas `{texture, material, rects}`),
+  `ctx.drumSurfaces = { back, sides, glass, frame, HW, HH, HD }` (drum meshes; the back wall's map is ART's tile canvas —
+  overlay blood, don't replace the map), `ctx.environment.emergency` (0..1 escalation actually shown by the lights),
+  `ctx.environment.lighting.lights` `{ hemi, key (the ONLY shadow caster), fill, rim, spot (beacon) }`.
+* Lighting: procedural PMREM environment map (`scene.environment`), fill-driven escalation (key/hemi drift to red,
+  failing fluorescent tubes, rotating beacon spot from ~45 % fill). All lights always exist (intensity 0 when off).
+* Donors: one InstancedMesh per role + one per hairstyle/hat + stump caps + bone nubs; per-instance colour slots
+  (gown/skin/trim/feet/band/hair/arm/leg/lower/accent), face atlas cell (smile, blink, worried, hurt, drown, dead),
+  wound/drain state. Looks are resolved from `donor.type` + `donor.look` (`outfit: 'gown'|'suit'|'staff'`, `accessory`).
+* Quality: `low` = no shadows, facility detail props hidden; `medium/high` shadow map 1024/2048 (PCF radius 2.5/3.5).

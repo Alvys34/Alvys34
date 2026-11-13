@@ -1,9 +1,13 @@
 /**
  * Shift 4 — "The Good Machine". The grinder: 100 % yield, but slow, and it JAMS if you feed it
- * more than one donor at a time. SLAM clears a jam.
- * Layout: the grinder is a pit in the middle of the floor; donors land on the bare left end —
- * tilt them across to it a few at a time. A short ceiling bed is there for the late pool / flips,
- * and a small saw on the right end of the floor punishes over-tilting.
+ * more than a donor at a time. SLAM clears a jam.
+ * Orientation (shifts 2-8): the drum STARTS UPSIDE DOWN (startAngle = pi). Donors land on the bare
+ * 'ceiling' face; the machinery sits overhead in the middle of the 'floor' face. Reaching it takes a
+ * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
+ * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
+ * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
+ * Layout: the grinder is a pit in the middle of the far face, a saw and a spike bed either side of
+ * it. Bring the face down, then tilt the crowd across the pit a few at a time.
  */
 export default {
   id: 'shift-4',
@@ -14,12 +18,12 @@ export default {
   duration: 135,
   capacity: 135,
   quota: [36, 70, 100],
-  startAngle: 0,
-  hatch: { wall: 'back', x: -5.0, y: 1.0, offset: 1.2 },
+  startAngle: Math.PI,
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'grinder', wall: 'floor', at: 0.6, width: 2.6, z: [-2.2, 2.2] },
-    { type: 'saw', wall: 'floor', at: 5.6, z: [-2.5, 2.5], radius: 0.95, dir: 1 },
-    { type: 'spikes', wall: 'ceiling', from: -3, to: 3, z: [-2.5, 2.5] },
+    { type: 'grinder', wall: 'floor', at: 0, width: 2.6, z: [-2.2, 2.2] },
+    { type: 'saw', wall: 'floor', at: 5.0, z: [-2.5, 2.5], radius: 0.95, dir: 1 },
+    { type: 'spikes', wall: 'floor', from: -6.5, to: -3.5, z: [-2.5, 2.5] },
   ],
   waves: [
     { at: 1.5, count: 5 },

@@ -1,8 +1,14 @@
 /**
  * Shift 7 — "Rush Hour". Rail saws + a crusher + Thin-Bloods, dense waves.
- * Donors land on the bare left end. A rail saw sweeps the middle of the floor; the press slams down
- * from the ceiling onto the right of the floor on a fixed beat (light + hiss first) — tilt the line
- * under it in time. Thin-Bloods drain completely from any wound — quantity over care.
+ * Orientation (shifts 2-8): the drum STARTS UPSIDE DOWN (startAngle = pi). Donors land on the bare
+ * 'ceiling' face; the machinery sits overhead in the middle of the 'floor' face. Reaching it takes a
+ * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
+ * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
+ * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
+ * Layout: overhead, a rail saw sweeps the middle of the far face. A press hangs from the far face at
+ * the left end and slams down onto the landing face on a fixed beat (light + hiss first): line the
+ * crowd up under it in time — or bring them up to the rail saw. Thin-Bloods drain completely from
+ * any wound: quantity over care.
  */
 export default {
   id: 'shift-7',
@@ -13,12 +19,11 @@ export default {
   duration: 140,
   capacity: 165,
   quota: [52, 100, 140],
-  startAngle: 0,
-  hatch: { wall: 'back', x: -5.6, y: 1.0, offset: 1.2 },
+  startAngle: Math.PI,
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'railSaw', wall: 'floor', from: -2.2, to: 1.4, z: [-2.5, 2.5], radius: 1.0, period: 5.5 },
-    { type: 'crusher', wall: 'ceiling', at: 4.2, width: 2.8, z: [-2.5, 2.5], period: 5.0 },
-    { type: 'spikes', wall: 'ceiling', from: -6, to: 0, z: [-2.5, 2.5] },
+    { type: 'railSaw', wall: 'floor', from: -2.4, to: 2.4, z: [-2.5, 2.5], radius: 1.0, period: 5.5 },
+    { type: 'crusher', wall: 'floor', at: -5.2, width: 2.8, z: [-2.5, 2.5], period: 5.0 },
   ],
   waves: [
     { at: 1.5, count: 7, types: { standard: 4, thinBlood: 3 } },

@@ -213,7 +213,7 @@ export function drumBackCanvas(scale = 1) {
   stencil(g, 'THIS SIDE UP', W / 2, PPM * 0.62, PPM * 0.42, CSS.mint4, rng, { alpha: 0.78 });
   arrow(g, W / 2 - PPM * 2.15, PPM * 0.62, PPM * 0.3, CSS.mint4, 0.78);
   arrow(g, W / 2 + PPM * 2.15, PPM * 0.62, PPM * 0.3, CSS.mint4, 0.78);
-  stencil(g, 'CHAMBER A', PPM * 0.55, PPM * 0.5, PPM * 0.26, CSS.steelDark, rng, { align: 'left', alpha: 0.7 });
+  stencil(g, 'CHAMBER A', PPM * 0.55, PPM * 1.45, PPM * 0.26, CSS.steelDark, rng, { align: 'left', alpha: 0.7 });
   stencil(g, 'MAX LOAD: 25 DONORS', PPM * 0.55, bandY + PPM * 0.75, PPM * 0.2, CSS.mint4, rng, { align: 'left', alpha: 0.7 });
   stencil(g, 'PLEASE KEEP ARMS AND LEGS', W - PPM * 0.55, bandY + PPM * 0.68, PPM * 0.17, CSS.mint4, rng, { align: 'right', alpha: 0.7 });
   stencil(g, 'INSIDE THE DRUM AT ALL TIMES', W - PPM * 0.55, bandY + PPM * 0.94, PPM * 0.17, CSS.mint4, rng, { align: 'right', alpha: 0.7 });

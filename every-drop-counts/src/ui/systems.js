@@ -33,15 +33,18 @@ export function createSystems({ bus, view, audio, loop, root, debug = false, loc
   let fpsAcc = 0; let fpsN = 0; let fpsT = 0; let lowStreak = 0;
   function applyQuality(q) {
     autoQuality = false;
+    const hasGovernor = view && typeof view.setAutoQuality === 'function';
     if (q === 'auto') {
-      const r = call(view, 'setQuality', 'auto');
-      if (r.ok && r.value !== false) return; // VFX handles auto itself
-      autoQuality = true;
+      // VFX governor (render/quality.js): start at high and let it step down under load.
+      // It stays off in ?debug=1 runs (software WebGL is always "slow").
+      call(view, 'setQuality', 'high');
+      if (hasGovernor) { if (!debug) call(view, 'setAutoQuality', true); return; }
+      autoQuality = true; // fallback governor below
       autoLevel = 'high';
-      call(view, 'setQuality', autoLevel);
       return;
     }
     call(view, 'setQuality', q);
+    if (hasGovernor) call(view, 'setAutoQuality', false); // the player picked a preset: respect it
   }
   /** Feed frame times while playing; steps auto quality down after sustained low fps. */
   function tickQuality(realDt, playing) {
@@ -94,10 +97,9 @@ export function createSystems({ bus, view, audio, loop, root, debug = false, loc
       case 'quality': if (!lockQuality) applyQuality(st.quality); break;
       case 'screenShake': {
         const scale = SHAKE[st.screenShake] ?? 1;
-        const vSet = vs();
-        vSet.screenShake = scale > 0;
-        vSet.shakeScale = scale;
-        call(view, 'setScreenShake', scale);
+        // camera.js scales sway/shake/kicks/zoom-punch by settings.screenShake (0..1)
+        const r = call(view, 'setScreenShake', scale);
+        if (!r.ok) vs().screenShake = scale;
         break;
       }
       case 'bloodColor': {

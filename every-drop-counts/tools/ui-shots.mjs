@@ -285,9 +285,12 @@ async function screens(browser) {
     await page.evaluate(() => window.__edc.setInput(null));
     await step(page, 120, 30);
     // force a few HUD states so the shot shows them
-    await page.evaluate(() => { const b = window.__edc.bus; b.emit('combo', { count: 3, multiplier: 3 }); b.emit('bonus', { liters: 2, reason: 'early-finish' }); b.emit('fine', { liters: 25, reason: 'workplace-incident' }); b.emit('pa:announce', { text: 'Partial donations are still donations.', mood: 'calm' }); });
+    await page.evaluate(() => { const b = window.__edc.bus; b.emit('pa:announce', { text: 'Partial donations are still donations.', mood: 'calm' }); });
     await step(page, 2, 2);
     await sleep(1400);
+    // a live Sponsor Match + callouts right before the shot (they decay within ~3 s)
+    await page.evaluate(() => { const sc = window.__edc.sim.ctx.scoring; sc.combo.count = 3; sc.combo.multiplier = 3; sc.combo.timer = 2.2; const b = window.__edc.bus; b.emit('combo', { count: 3, multiplier: 3 }); b.emit('bonus', { liters: 2, reason: 'early-finish' }); b.emit('fine', { liters: 25, reason: 'workplace-incident' }); });
+    await sleep(250);
     await shot(page, `${tag}-05-hud`);
     await page.evaluate(() => { window.__edc.bus.emit('pa:announce', { text: 'Please do not let donors drown. It wastes product.', mood: 'urgent' }); });
     await sleep(1600);

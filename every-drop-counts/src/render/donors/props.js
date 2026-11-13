@@ -261,7 +261,7 @@ function buildSphere(ctx, view, kit) {
   shell.renderOrder = 12;
   group.add(shell);
   // faint tinted body so the ball reads against pale walls
-  const tintMat = new THREE.MeshStandardMaterial({ color: 0xcff3ee, transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.1, depthWrite: false });
+  const tintMat = new THREE.MeshStandardMaterial({ color: 0xcff3ee, transparent: true, opacity: 0.06, roughness: 0.05, metalness: 0.1, depthWrite: false });
   const body = new THREE.Mesh(new THREE.SphereGeometry(R * 0.995, 24, 16), tintMat);
   body.renderOrder = 11;
   group.add(body);
@@ -269,7 +269,6 @@ function buildSphere(ctx, view, kit) {
   const B = builder(THREE, { colors: true });
   B.add(new THREE.TorusGeometry(R * 1.005, 0.045, 6, 48), { color: PAL.hazard });
   B.add(new THREE.TorusGeometry(R * 1.005, 0.045, 6, 48), { rot: [0, Math.PI / 2, 0], color: PAL.hazard });
-  B.add(new THREE.TorusGeometry(R * 1.005, 0.03, 6, 48), { rot: [Math.PI / 2, 0, 0], color: 0xf7f8f6 });
   for (const s of [-1, 1]) B.add(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12), { pos: [0, 0, s * R], rot: [Math.PI / 2, 0, 0], color: PAL.steelDark });
   const hoopGeo = B.build();
   const hoops = new THREE.Mesh(hoopGeo, kit.M.paintedMetal);
@@ -281,7 +280,7 @@ function buildSphere(ctx, view, kit) {
     update(v) {
       const cr = v.cracks ?? (v.maxHits ? (v.hits || 0) / v.maxHits : 0);
       shellMat.uniforms.cracks.value = cr;
-      tintMat.opacity = 0.12 + cr * 0.08;
+      tintMat.opacity = 0.06 + cr * 0.1;
       lastCr = cr;
     },
     onRemove(v) {

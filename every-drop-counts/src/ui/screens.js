@@ -171,7 +171,8 @@ export function createScreens(app) {
       const meta = e.querySelector('.brief-meta');
       if (info.quota) {
         meta.innerHTML = `<span class="meta-quota">${info.quota.map((q, i) => `<span class="q">${dropsHtml(i + 1, 'tiny')}<b class="num">${Math.round(q)}</b><i>L</i></span>`).join('')}</span>
-          <span class="meta-time">${icon('clock')}<b class="num">${fmtClock(info.duration)}</b></span>`;
+          <span class="meta-time">${icon('clock')}<b class="num">${fmtClock(info.duration)}</b></span>
+          ${info.best ? `<span class="meta-best">${icon('rosette')}Your best <b class="num">${fmtL(info.best.liters)} L</b>${dropsHtml(info.best.stars, 'tiny')}</span>` : ''}`;
       } else meta.innerHTML = info.metaHtml || '';
       const btn = e.querySelector('.btn');
       btn.querySelector('.btn-t').textContent = info.overtime ? MENU.beginOvertime : MENU.begin;

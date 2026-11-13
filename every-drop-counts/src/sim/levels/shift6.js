@@ -1,10 +1,14 @@
 /**
  * Shift 6 — "Breathe Easy". Oxygen tanks + Big Givers. Chain reactions.
  * A punctured tank rockets for ~2 s and explodes (severing limbs, puncturing other tanks).
- * Big Givers carry double blood, are hard to SLAM and squash whoever they land on.
- * Layout: donors and tanks land on the bare left end. A spike bed in the middle of the floor and a
- * saw right of it — tip a tank onto them while the crowd is clumped next to it. Ceiling bed for
- * flips and the late pool.
+ * Big Givers carry double blood, are hard to SLAM and squash whoever they land on from height.
+ * Orientation (shifts 2-8): the drum STARTS UPSIDE DOWN (startAngle = pi). Donors land on the bare
+ * 'ceiling' face; the machinery sits overhead in the middle of the 'floor' face. Reaching it takes a
+ * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
+ * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
+ * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
+ * Layout: overhead, a spike bed and a saw side by side. Tip a tank onto them while the crowd is
+ * clumped next to it; drop the Big Givers from height (they are too heavy to slam).
  */
 export default {
   id: 'shift-6',
@@ -15,12 +19,11 @@ export default {
   duration: 130,
   capacity: 150,
   quota: [40, 82, 118],
-  startAngle: 0,
-  hatch: { wall: 'back', x: -5.0, y: 1.0, offset: 1.2 },
+  startAngle: Math.PI,
+  hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'spikes', wall: 'floor', from: -2.6, to: 0.8, z: [-2.5, 2.5] },
-    { type: 'saw', wall: 'floor', at: 3.2, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
-    { type: 'spikes', wall: 'ceiling', from: -4, to: 4, z: [-2.5, 2.5] },
+    { type: 'spikes', wall: 'floor', from: -3.0, to: 0.6, z: [-2.5, 2.5] },
+    { type: 'saw', wall: 'floor', at: 3.0, z: [-2.5, 2.5], radius: 1.1, dir: -1 },
   ],
   waves: [
     { at: 1.5, count: 5, types: { standard: 4, bigGiver: 1 }, props: [{ type: 'oxygenTank', count: 2 }] },

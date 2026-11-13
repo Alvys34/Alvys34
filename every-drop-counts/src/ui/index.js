@@ -188,6 +188,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
       icon: b.icon,
       quota: overtime ? null : level.quota,
       duration: level.duration,
+      best: overtime ? null : (getSave().best[level.id] && getSave().best[level.id].stars > 0 ? getSave().best[level.id] : null),
       overtime,
       metaHtml: overtime && getSave().overtime[0] ? `<span class="meta-time">${icon('rosette')}<b class="num">Best ${getSave().overtime[0].liters.toFixed(1)} L</b></span>` : '',
     });
