@@ -229,7 +229,7 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
     unlockAudio();
     // the sound bank pre-renders in the menus; if the player got here faster, finish it now (before
     // the first sim step) instead of synthesising during the opening seconds of the shift
-    safeAudio((a) => { if (typeof a.warmup === 'function') a.warmup(2500); });
+    safeAudio((a) => { if (typeof a.warmup === 'function') a.warmup(5000); });
     loop.resetAccumulator();
     return sim.snapshot();
   }

@@ -109,6 +109,9 @@ export function createLoop({ dt = 1 / 60, maxStepsPerFrame = 5, step, render, on
     /** Advance n fixed steps synchronously, then render once unless doRender === false (debug harness). */
     stepNow(n = 1, doRender = true) {
       for (let i = 0; i < n; i++) doStep();
+      // let timed effects run out as if n frames of real time had passed (tools stop the RAF loop)
+      if (hitStopLeft > 0) hitStopLeft -= n * dt;
+      if (slowLeft > 0) { slowLeft -= n * dt; if (slowLeft <= 0) slowScale = 1; }
       if (doRender) render(1, 0, n * dt);
     },
   };

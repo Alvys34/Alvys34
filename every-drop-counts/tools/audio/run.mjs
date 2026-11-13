@@ -91,7 +91,9 @@ try {
     table(ev, COLS.filter((c) => c !== 'cls'));
     for (const r of ev) {
       check(!r.clip, `event ${r.id} clips`);
-      check(r.momDb > -50, `event ${r.id} silent (${r.momDb} dB)`);
+      // a soft tumbling contact (below the impact curve, see src/audio/events.js) must stay silent
+      if (/ soft$/.test(r.id)) check(r.momDb < -60, `event ${r.id} should be silent (${r.momDb} dB)`);
+      else check(r.momDb > -50, `event ${r.id} silent (${r.momDb} dB)`);
       check(r.errors === 0, `event ${r.id} engine errors: ${r.errorLog}`);
     }
   }

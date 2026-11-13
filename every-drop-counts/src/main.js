@@ -16,6 +16,7 @@ import { createSim } from './sim/index.js';
 import { createRenderer } from './render/index.js';
 import { createUI } from './ui/index.js';
 import { createSimBus } from './ui/attract.js';
+import { createAudio } from './audio/index.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug') && params.get('debug') !== '0';
@@ -32,15 +33,10 @@ const ready = new Promise((res, rej) => { resolveReady = res; rejectReady = rej;
 ready.catch(() => {});
 if (DEBUG) window.__edc = { ready, errors };
 
-// ---- AUDIO INTEGRATION POINT (src/audio is owned by the AUDIO agent) ----
-// import.meta.glob keeps the build green whether or not src/audio/index.js exists.
-const audioModules = import.meta.glob('./audio/index.js');
-async function loadAudio() {
-  const loader = audioModules['./audio/index.js'];
-  if (!loader) return null;
+// ---- AUDIO (src/audio): fail-soft — any construction error leaves the game silent, never broken ----
+function loadAudio() {
   try {
-    const mod = await loader();
-    return typeof mod.createAudio === 'function' ? mod.createAudio() : null;
+    return createAudio();
   } catch (err) {
     console.warn('[edc] audio unavailable:', err);
     return null;
@@ -48,7 +44,10 @@ async function loadAudio() {
 }
 
 async function boot() {
+  const mark = (n) => { try { performance.mark(`edc:${n}`); } catch { /* ignore */ } }; // boot timeline (perf tools)
+  mark('boot');
   await RAPIER.init();
+  mark('rapier');
   const canvas = document.getElementById('game');
   const uiRoot = document.getElementById('ui-root');
   const save = getSave();
@@ -59,9 +58,10 @@ async function boot() {
   const sim = createSim({ RAPIER, bus: simBus, seed });
   const quality = params.get('quality') || (save.settings.quality === 'auto' ? 'high' : save.settings.quality);
   const view = createRenderer({ canvas, bus, settings: { ...save.settings, quality, screenShake: ({ off: 0, reduced: 0.4, full: 1 })[save.settings.screenShake] ?? 1, preserveDrawingBuffer: DEBUG } });
+  mark('renderer');
   const input = createInput(window);
 
-  const audio = await loadAudio();
+  const audio = loadAudio();
   const safeAudio = (fn) => { if (!audio) return; try { fn(audio); } catch (e) { console.warn('[edc] audio call failed', e); } };
   safeAudio((a) => {
     a.attach(bus);
@@ -69,6 +69,7 @@ async function boot() {
     a.setVolume('music', save.settings.music);
     a.setVolume('sfx', save.settings.sfx);
   });
+  mark('audio');
   // ---- APP FLOW (owner: UI — src/ui/index.js holds the state machine, menus, HUD, results) ----
   // per-frame main-thread cost split (ms, summed until __edc.perfReset()): sim / view / ui / audio
   const perf = { frames: 0, steps: 0, sim: 0, view: 0, ui: 0, audio: 0, maxFrame: 0 };
@@ -119,6 +120,7 @@ async function boot() {
   // boot splash + attract mode (or straight into a shift with ?autostart=N|overtime)
   const auto = params.get('autostart');
   document.getElementById('boot')?.remove();
+  mark('ui');
   ui.boot({ autostart: auto ? (auto === 'overtime' ? 'overtime' : Number(auto) || auto) : null });
   loop.start();
 
@@ -149,6 +151,7 @@ async function boot() {
       pause: (p = true) => ui.setPaused(p),
     });
   }
+  mark('ready');
   resolveReady(true);
 }
 

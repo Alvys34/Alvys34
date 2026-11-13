@@ -609,11 +609,70 @@ const PROBE = `(async () => {
   return JSON.parse(JSON.stringify(r));
 })()`;
 
+// Real-game flow (only with the ?debug=1 harness): boot splash -> title -> Clock in -> briefing ->
+// shift 1 with real key input (OS-level input events, so audio unlocks from a real gesture) ->
+// pause/resume -> fullscreen + achievement through the game's own bridge calls -> (first launch)
+// finish the shift so a result is saved -> back to the title, Quit dialog opened for the UI quit.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SAVE_SUMMARY = `(() => { try { const s = JSON.parse(localStorage.getItem('edc.save.v1') || 'null');
+  return s && { secondsOnShift: s.stats && s.stats.secondsOnShift, best: Object.keys(s.best || {}), achievements: Object.keys(s.achievements || {}), unlocked: s.progress && s.progress.unlocked }; } catch (e) { return String(e); } })()`;
+async function runGameFlow() {
+  const js = (src) => win.webContents.executeJavaScript(src, true);
+  const key = async (keyCode, holdMs = 60) => {
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+    await sleep(holdMs);
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+    await sleep(200);
+  };
+  const screen = () => js('window.__edc.ui.screen');
+  const waitScreen = async (want, ms) => { const t0 = Date.now(); let sc; do { sc = await screen(); if (sc === want) return sc; await sleep(100); } while (Date.now() - t0 < ms); return sc; };
+  const f = {};
+  f.saveAtBoot = await js(SAVE_SUMMARY);
+  f.bootScreen = await screen();
+  win.focus(); win.webContents.focus();
+  await key('Enter');                                   // boot splash -> title (the audio-unlock gesture)
+  f.afterBoot = await waitScreen('menu', 6000);
+  await sleep(300);
+  f.audio = await js(`(() => { const a = window.__edc.audio; const s = a && a.debug && a.debug.stats(); return s ? { state: s.state, bankQueue: s.bankQueue, errors: s.errors } : null; })()`);
+  await key('Enter');                                   // title: Clock in -> briefing
+  f.afterClockIn = await waitScreen('briefing', 6000);
+  await key('Enter');                                   // briefing: begin
+  f.afterBegin = await waitScreen('playing', 10000);
+  if (f.afterBegin !== 'playing') { await js('window.__edc.ui.startRun(1), true'); f.startedViaHarness = true; }
+  const t0 = await js('window.__edc.sim.state.time');
+  const th0 = await js('window.__edc.sim.state.drum.theta');
+  await key('D', 3000); await key('A', 2500); await key('Space', 120); await key('D', 1500);
+  f.play = await js(`(() => { const e = window.__edc; const s = e.getState(); return { screen: s.screen, levelId: s.levelId, time: s.time, slams: s.slam && s.slam.count, fps: s.fps, audio: e.audio && e.audio.debug ? { state: e.audio.debug.stats().state, bankQueue: e.audio.debug.stats().bankQueue } : null }; })()`);
+  f.simAdvanced = +(f.play.time - t0).toFixed(2);
+  f.drumTurned = +Math.abs((await js('window.__edc.sim.state.drum.theta')) - th0).toFixed(3);
+  await key('Escape'); f.paused = await waitScreen('paused', 4000);
+  await key('Escape'); f.resumed = await waitScreen('playing', 4000);
+  f.fsOn = await js('window.__edc.ui.systems.setFullscreen(true)'); await sleep(800); f.fsOnWin = win.isFullScreen();
+  f.fsOff = await js('window.__edc.ui.systems.setFullscreen(false)'); await sleep(800); f.fsOffWin = win.isFullScreen();
+  await js(`window.__edc.bus.emit('achievement', { id: 'FIRST_SHIFT' }), true`);  // persisted + forwarded to Steam
+  if (!f.saveAtBoot || !(f.saveAtBoot.best || []).length) {
+    f.fastForward = await js(`(async () => { const e = window.__edc;
+      for (let i = 0; i < 90 && e.sim.state.status !== 'ended'; i++) { e.setInput({ rotate: Math.sin(i * 0.9) > 0 ? 1 : -1, brake: false, slam: i % 4 === 0 }); e.step(120, false); await new Promise((r) => setTimeout(r, 0)); }
+      e.setInput(null); return { status: e.sim.state.status, time: +e.sim.state.time.toFixed(1), liters: +e.getState().liters.toFixed(1) }; })()`);
+    f.results = await waitScreen('results', 40000);
+  }
+  f.saveNow = await js(SAVE_SUMMARY);
+  f.errors = await js('window.__edc.errors.slice(0, 20).map(String)');
+  await js('window.__edc.ui.debug.toTitle(), true'); await sleep(500);
+  await key('Escape');                                  // title: Back = Quit (desktop) -> confirm dialog
+  f.quitDialog = await js('(() => { const t = window.__edc.ui.nav.top; return t ? t.name : null; })()');
+  return f;
+}
+
 async function runSmoke() {
   const waitMs = Number(process.env.EDC_SMOKE_WAIT_MS || 3000);
   await new Promise((r) => setTimeout(r, waitMs));
   if (!win || win.isDestroyed()) return smokeFail('window gone');
   const probe = await win.webContents.executeJavaScript(PROBE, true);
+  let gameFlow = null;
+  if (probe && probe.game && probe.game.ready) {
+    try { gameFlow = await runGameFlow(); } catch (e) { gameFlow = { error: String(e && e.stack) }; }
+  }
   // Keyboard fullscreen toggles (synthetic key events go through before-input-event).
   const keyToggle = {};
   try {
@@ -645,14 +704,23 @@ async function runSmoke() {
     steam: steam.publicState(STEAM),
     screenshot: { width: size.width, height: size.height, distinctSampledColors: colors.size },
     probe,
+    gameFlow,
     consoleErrors: smokeState.consoleErrors,
   };
   smokeWrite('report.json', JSON.stringify(report, null, 2));
   const holdMs = Number(process.env.EDC_SMOKE_HOLD_MS || 0);   // lets the runner grab an X11 screenshot
   if (holdMs > 0) await new Promise((r) => setTimeout(r, holdMs));
-  log('[smoke] probe done; asking the page to call edcDesktop.quit()');
-  // Fire and forget: the frame is torn down by the quit, so this promise may reject - that is success.
-  win.webContents.executeJavaScript('setTimeout(() => window.edcDesktop && window.edcDesktop.quit(), 0); true', true).catch(() => {});
+  if (gameFlow && gameFlow.quitDialog === 'confirm') {
+    // the game's own Quit: confirm dialog (focus starts on "No") -> Right -> Enter -> edcDesktop.quit()
+    log('[smoke] probe done; quitting through the game UI (Quit -> Yes)');
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' }); win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
+    await sleep(300);
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' }); win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+  } else {
+    log('[smoke] probe done; asking the page to call edcDesktop.quit()');
+    // Fire and forget: the frame is torn down by the quit, so this promise may reject - that is success.
+    win.webContents.executeJavaScript('setTimeout(() => window.edcDesktop && window.edcDesktop.quit(), 0); true', true).catch(() => {});
+  }
   setTimeout(() => smokeFail('edcDesktop.quit() did not quit within 10 s'), 10000).unref();
 }
 

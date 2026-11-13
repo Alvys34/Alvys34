@@ -10,7 +10,7 @@
 //                               [--query <qs>] [--allow-console-errors] [--keep-profile]
 //   --app      packaged folder (default release/EveryDropCounts-linux-x64)
 //   --direct   run the binary instead of the EveryDropCounts.sh launcher
-//   --query    page query string (default "debug=1" for real-game builds, none for the placeholder)
+//   --query    page query string (default "debug=1&quality=low" for real-game builds, none for the placeholder)
 //   --wait     ms to let the page run before probing (default 4000; real game: 8000)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -37,7 +37,8 @@ try {
   buildInfo = JSON.parse(extractFile(path.join(appDir, 'resources', 'app.asar'), 'build-info.json').toString());
 } catch (e) { console.error(`smoke: cannot read build-info.json from app.asar: ${e.message}`); process.exit(2); }
 const isRealGame = buildInfo.gameSource !== 'placeholder';
-const query = opt('query', isRealGame ? 'debug=1' : '');
+// quality=low: software GL (SwiftShader under xvfb) renders the high preset at ~1 frame per few seconds
+const query = opt('query', isRealGame ? 'debug=1&quality=low' : '');
 const waitMs = Number(opt('wait', isRealGame ? 8000 : 4000));
 const useLauncher = !flag('direct') && fs.existsSync(launcher);
 const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
@@ -61,7 +62,7 @@ function runOnce(n) {
   const inner = [
     `${q(target)} ${appArgs.map(q).join(' ')} > ${q(path.join(runDir, 'stdout.log'))} 2>&1 &`,
     'pid=$!',
-    `for i in $(seq 1 1200); do [ -f ${q(path.join(runDir, 'report.json'))} ] && break; kill -0 $pid 2>/dev/null || break; sleep 0.1; done`,
+    `for i in $(seq 1 3000); do [ -f ${q(path.join(runDir, 'report.json'))} ] && break; kill -0 $pid 2>/dev/null || break; sleep 0.1; done`,
     `[ -f ${q(path.join(runDir, 'report.json'))} ] && import -window root ${q(path.join(runDir, 'x11-root.png'))} 2>/dev/null`,
     'wait $pid',
     'exit $?',
@@ -82,7 +83,7 @@ function runOnce(n) {
       stdio: 'inherit',
       detached: true,
     });
-    const timer = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } }, 120000);
+    const timer = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } }, 330000);
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       const read = (f) => { try { return JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8')); } catch { return null; } };
@@ -141,6 +142,30 @@ for (const r of results) {
   } else if (isRealGame) {
     check(`${tag}: game debug harness (__edc) present`, !query.includes('debug=1'), 'window.__edc missing with ?debug=1');
   }
+}
+// real game: the play-through (boot -> title -> shift 1 with key input -> pause -> save -> UI quit)
+for (const r of results) {
+  const g = r.report?.gameFlow;
+  if (!isRealGame || !query.includes('debug=1')) break;
+  const tag = `run${r.n}`;
+  if (!g || g.error) { check(`${tag}: game flow ran`, false, g?.error || 'no gameFlow in report'); continue; }
+  check(`${tag}: boot splash -> title on a key press`, g.bootScreen === 'boot' && g.afterBoot === 'menu', `${g.bootScreen} -> ${g.afterBoot}`);
+  check(`${tag}: audio unlocked by the key press`, g.audio && g.audio.state === 'running' && !g.audio.errors, JSON.stringify(g.audio));
+  check(`${tag}: title -> briefing -> shift 1 with the keyboard`, g.afterClockIn === 'briefing' && g.afterBegin === 'playing' && !g.startedViaHarness, `${g.afterClockIn} -> ${g.afterBegin}`);
+  check(`${tag}: shift runs and reacts to input`, g.play?.screen === 'playing' && /^shift-\d$/.test(g.play?.levelId || '') && g.simAdvanced > 0.5 && g.drumTurned > 0.1 && g.play?.slams >= 1,
+    `${g.play?.levelId}: sim +${g.simAdvanced}s, drum turned ${g.drumTurned} rad, slams ${g.play?.slams}, fps ${g.play?.fps}`);
+  check(`${tag}: sound bank warm before play`, g.play?.audio && g.play.audio.bankQueue === 0, JSON.stringify(g.play?.audio));
+  check(`${tag}: Esc pauses and resumes`, g.paused === 'paused' && g.resumed === 'playing', `${g.paused} / ${g.resumed}`);
+  check(`${tag}: settings fullscreen toggles through the bridge`, g.fsOn === true && g.fsOnWin === true && g.fsOff === false && g.fsOffWin === false, `on=${g.fsOn}/${g.fsOnWin} off=${g.fsOff}/${g.fsOffWin}`);
+  check(`${tag}: achievement persisted`, (g.saveNow?.achievements || []).includes('FIRST_SHIFT'), JSON.stringify(g.saveNow?.achievements));
+  if (g.fastForward) check(`${tag}: shift 1 finished and the report shown`, g.fastForward.status === 'ended' && g.results === 'results' && (g.saveNow?.best || []).includes('shift-1'), `${JSON.stringify(g.fastForward)} screen=${g.results}`);
+  check(`${tag}: no game errors during play`, (g.errors || []).length === 0, (g.errors || []).slice(0, 3).join(' | '));
+  check(`${tag}: Quit dialog opened from the title`, g.quitDialog === 'confirm', String(g.quitDialog));
+}
+if (isRealGame && query.includes('debug=1')) {
+  const g1 = a.report?.gameFlow; const g2 = b.report?.gameFlow;
+  check('game save persists across relaunch', (g2?.saveAtBoot?.best || []).includes('shift-1') && (g2?.saveAtBoot?.achievements || []).includes('FIRST_SHIFT') && (g2?.saveAtBoot?.secondsOnShift || 0) >= (g1?.saveNow?.secondsOnShift || 1),
+    `run2 boot save: ${JSON.stringify(g2?.saveAtBoot)}`);
 }
 const la = a.report?.probe?.localStorage?.launchCount;
 const lb = b.report?.probe?.localStorage?.launchCount;
