@@ -23,6 +23,7 @@ const PORT = Number(get('port', '5177'));
 const OUT = resolve(get('out', resolve(ROOT, 'tools/out/ui')));
 const SIZES = get('sizes', '1280x720,1920x1080,2560x1080,1280x800').split(',').map((s) => s.split('x').map(Number));
 const ONLY = get('only', null);
+const EXTRA = get('query', ''); // e.g. --query "&quality=low" (software WebGL is slow on a loaded machine)
 const BASE = has('dist') ? pathToFileURL(resolve(ROOT, 'dist/index.html')).href : get('url-base', `http://localhost:${PORT}/`);
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
 
@@ -50,6 +51,7 @@ async function newPage(browser, w, h, { pad = false, storage = null } = {}) {
   if (pad) await ctx.addInitScript(PAD_SHIM);
   if (storage !== null) await ctx.addInitScript((s) => { if (!sessionStorage.getItem('__seeded')) { sessionStorage.setItem('__seeded', '1'); if (s === '') localStorage.clear(); else localStorage.setItem('edc.save.v1', s); } }, storage);
   const page = await ctx.newPage();
+  page.setDefaultTimeout(240000);
   const errs = [];
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
   page.on('pageerror', (e) => errs.push(String(e)));
@@ -57,7 +59,7 @@ async function newPage(browser, w, h, { pad = false, storage = null } = {}) {
   return page;
 }
 async function open(page, query = '') {
-  await page.goto(`${BASE}?debug=1&seed=1${query}`);
+  await page.goto(`${BASE}?debug=1&seed=1${EXTRA}${query}`);
   await page.waitForFunction(() => window.__edc && window.__edc.getState, null, { timeout: 90000 });
   await page.evaluate(() => window.__edc.ready);
   await page.evaluate(() => document.fonts && document.fonts.ready);
@@ -69,7 +71,7 @@ async function key(page, k, wait = 260) { await page.keyboard.press(k); await sl
 async function shot(page, name) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const file = resolve(OUT, `${name}.png`);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, timeout: 240000 });
   console.log(`  shot ${file}`);
 }
 async function step(page, n, renderLast = 0) {
@@ -127,7 +129,7 @@ async function flow(browser) {
   await playShift(page, { maxSteps: 12000, render: 20 });
   let st = await state(page);
   console.log(`  shift 1 ended: L=${st.liters} stars=${st.stars} result=${st.result && st.result.result}`);
-  await page.waitForFunction(() => window.__edc.getState().screen === 'results', null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__edc.getState().screen === 'results', null, { timeout: 240000 });
   await sleep(2600);
   await shot(page, 'flow-02-results');
   check(await topScreen(page) === 'results', 'results report shown');
@@ -183,41 +185,44 @@ async function pad(browser) {
   console.log('\n== simulated gamepad 1280x800');
   const page = await newPage(browser, 1280, 800, { pad: true, storage: '' });
   await open(page);
-  const press = async (i, wait = 260) => { await page.evaluate((b) => window.__pad.hold(b, true), i); await sleep(90); await page.evaluate((b) => window.__pad.hold(b, false), i); await sleep(wait); };
+  // the pad is polled once per rendered frame: hold until two frames have seen it
+  const frames = () => page.evaluate(() => window.__edc.loop.stats.frames);
+  const waitFrames = async (n) => { const f0 = await frames(); await page.waitForFunction(([a, k]) => window.__edc.loop.stats.frames >= a + k, [f0, n], { timeout: 240000 }); };
+  const press = async (i) => { await page.evaluate((b) => window.__pad.hold(b, true), i); await waitFrames(1); await page.evaluate((b) => window.__pad.hold(b, false), i); await waitFrames(1); };
   await page.evaluate(() => window.__pad.connect());
-  await press(0, 700); // A
+  await press(0); // A
   check(await topScreen(page) === 'title', 'pad A on boot -> title');
   check(await page.evaluate(() => window.__edc.input.lastDevice) === 'gamepad', 'last device = gamepad');
   check(await page.evaluate(() => !!document.querySelector('.title-scr .glyph.btn')), 'menu shows gamepad glyphs');
   await shot(page, 'pad-01-title');
-  for (let i = 0; i < 4; i++) await press(13, 200); // d-pad down x4 -> Settings
+  for (let i = 0; i < 4; i++) await press(13); // d-pad down x4 -> Settings
   check((await focusedText(page) || '').startsWith('Settings'), 'd-pad reaches Settings');
   await press(0, 600);
   check(await topScreen(page) === 'settings', 'A opens settings');
-  await press(15, 200); // right: master +5
+  await press(15); // right: master +5
   const m = (await save(page)).settings.master;
   check(Math.abs(m - 0.85) < 1e-6, `d-pad right raises master volume (${m})`);
   // left stick down moves focus
-  await page.evaluate(() => window.__pad.axis(1, 0.9)); await sleep(150); await page.evaluate(() => window.__pad.axis(1, 0)); await sleep(200);
+  await page.evaluate(() => window.__pad.axis(1, 0.9)); await waitFrames(1); await page.evaluate(() => window.__pad.axis(1, 0)); await waitFrames(1);
   check((await focusedText(page) || '').startsWith('Music'), 'left stick moves focus');
   await shot(page, 'pad-02-settings');
-  await press(1, 600); // B
+  await press(1); // B
   check(await topScreen(page) === 'title', 'B goes back');
-  await press(13, 200); await press(13, 200); await press(13, 200); await press(13, 200); await press(13, 200); await press(13, 200);
-  await press(12, 200); await press(12, 200); await press(12, 200); await press(12, 200); await press(12, 200);
-  await press(0, 700); // shift select
+  await press(13); await press(13); await press(13); await press(13); await press(13); await press(13);
+  await press(12); await press(12); await press(12); await press(12); await press(12);
+  await press(0); // shift select
   check(await topScreen(page) === 'shifts', 'A opens shift select');
-  await press(0, 700);
+  await press(0);
   check(await topScreen(page) === 'briefing', 'A on shift 1 -> briefing');
-  await press(0, 700);
+  await press(0);
   check((await state(page)).screen === 'playing', 'A begins the shift');
   await page.evaluate(() => window.__edc.setTimeScale(0));
   await step(page, 120, 20);
   await shot(page, 'pad-03-hud-prompt');
   check(await page.evaluate(() => !!document.querySelector('.prompt .glyph.stick, .prompt .glyph.trig')), 'teaching prompt uses pad glyphs');
-  await press(9, 600); // Start
+  await press(9); // Start
   check((await state(page)).screen === 'paused', 'Start pauses');
-  await press(9, 600);
+  await press(9);
   check((await state(page)).screen === 'playing', 'Start resumes');
   reportErrors(page, 'pad');
   await page.context().close();

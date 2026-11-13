@@ -169,3 +169,34 @@ Degradation with `fill` (smoothed):
 - Tape dropouts.
 - Drive and bit-crush mixes rise; a resonant low-pass closes from 18 kHz to about 700 Hz; the high-pass rises (tinny speaker).
 - Above fill 0.65, random tape-stop dives.
+
+## Verification (`tools/audio/`)
+
+`node tools/audio/run.mjs` uses headless Chromium (Playwright) and tiny static server
+`tools/audio/server.mjs` on port 5181. It drives the real `createAudio()` and writes
+`tools/audio/out/report.json`; `--wav` also writes WAVs there (gitignored). It checks:
+
+- **Raw sounds:** every sound, 3 variants each, rendered offline through its class bus and the
+  master chain. It reports peak, momentary, RMS, duration, spectral centroid, band split and
+  flatness, and asserts levels within ±3 dB of `targets.mjs`, no clipping and spectral sanity
+  (crack short and bright, slam mostly under 250 Hz, squelch noisy low-mid, glass bright, …).
+- **Bus events:** every event type's full response, offline.
+- **Loops:** motor, saw, grinder, slosh, hum, alarm and a 1700 splats/s flood, plus motor onset
+  latency.
+- **Music:** each arrangement, fill 0 / 0.5 / 1, paused and slow-mo. It measures tuning purity and
+  in-key ratio from a 16k FFT, low-band loss and loudness drift, plus a ducking test.
+- **Robustness:** calls before unlock, junk payloads and states, double attach, dispose, and
+  missing WebAudio.
+- **60 s real-time stress shift:** fill ramps 0 to 1 with bursts of 400 splats, 20 simultaneous
+  deaths, an O2 chain, 300 mixed events in one frame and a pause. It meters the output every frame
+  and checks voices, node counts, Chrome's `AudioHandlers` counter (CDP) and per-event and
+  per-update cost.
+
+Latest run (Chromium headless, 44.1 kHz) passes every check:
+
+- 25,941 events: mean 24 µs per event; `update()` mean 0.49 ms.
+- Peak output -6.7 dBFS, never at the clip ceiling.
+- Voices peaked at 41 of 48.
+- About 4,100 one-shots played and about 22,000 rate-limited (absorbed by the patter bed).
+- After dispose and a forced GC, one AudioHandler remains.
+- Music: in-tune ratio 1.00 → 0.78 → 0.66 and in-key ratio 0.92 → 0.80 → 0.47 at fill 0 / 0.5 / 1.
