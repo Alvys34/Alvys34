@@ -10,7 +10,7 @@
  *   mode: 'shift',                 // optional; 'shift' default
  *   duration: s,                   // shift clock
  *   capacity: L,                   // litres that would fill the whole cross-section (pool speed)
- *   quota: [q1, q2, q3],           // litres for 1 / 2 / 3 drops
+ *   quota: [20, 42, 54],           // litres for 1 / 2 / 3 drops
  *   startAngle: rad,               // initial drum angle
  *   hatch: { wall, at, offset? },  // intake hatch on a drum wall (tangent coord `at`), or
  *          { wall: 'back', x, y } // a chute in the back wall: donors drop from mid-drum
@@ -30,7 +30,7 @@ export default {
   lesson: 'Rotate the drum. Donations from height are more generous.',
   duration: 105,
   capacity: 150,
-  quota: [14, 30, 44],
+  quota: [20, 42, 54],
   startAngle: 0,
   hatch: { wall: 'back', x: -4.6, y: 0.5, offset: 1.2 },
   hazards: [

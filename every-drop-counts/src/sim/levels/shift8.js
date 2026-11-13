@@ -20,15 +20,14 @@ export default {
   ending: { pa: 'Operator, please proceed to the intake chute. Thank you for donating.', mood: 'calm', next: 'credits' },
   duration: 150,
   capacity: 160,
-  quota: [55, 110, 155],
+  quota: [60, 150, 195],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
     { type: 'grinder', wall: 'floor', at: -1.4, width: 2.4, z: [-2.2, 2.2] },
     { type: 'spikes', wall: 'floor', from: 0.6, to: 3.2, z: [-2.5, 2.5] },
-    { type: 'crusher', wall: 'floor', at: 5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
-    { type: 'railSaw', wall: 'ceiling', from: -5.6, to: -3.0, z: [-2.5, 2.5], radius: 0.95, period: 4.5 },
-    { type: 'saw', wall: 'right', at: -1.0, z: [-2.5, 0.5], radius: 1.0, dir: -1 },
+    { type: 'crusher', wall: 'floor', at: -5.4, width: 2.6, z: [-2.5, 2.5], period: 6.0 },
+    { type: 'railSaw', wall: 'floor', from: 4.0, to: 6.4, z: [-2.5, 2.5], radius: 0.9, period: 4.5 },
   ],
   waves: [
     { at: 1.5, count: 6, types: { standard: 4, thinBlood: 2 }, props: [{ type: 'oxygenTank', count: 1 }] },

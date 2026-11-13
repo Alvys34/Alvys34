@@ -5,10 +5,11 @@
  * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
  * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
  * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
- * Layout: a wide spike bed overhead and a saw low on one side wall. Spikes only hurt what FALLS on
- * them, so his rolling ball can cross the bed — and a SLAM barely lifts the heavy ball, so slam
- * re-drops are the safe tool. Flipping the drum drops HIM from height too, and tilting the saw wall
- * down rolls him straight into it. Inspector dead = −25 L fine; alive at the end = +20 L.
+ * Layout: one very wide spike bed overhead, nothing else. Spikes only hurt what FALLS on them: his
+ * rolling ball can cross the bed safely, and a SLAM barely lifts the heavy ball, so slam re-drops are
+ * the safe tool. Flipping the drum or dropping the crowd from height drops HIM too (3 hits shatter
+ * the sphere, then he is an ordinary donor). Inspector dead = −25 L fine; alive at the end = +20 L.
+ * (A wall saw was cut here: mindless left-right mashing farmed it — see README balance notes.)
  */
 export default {
   id: 'shift-5',
@@ -18,12 +19,11 @@ export default {
   lesson: 'Inspectors must survive. Keep the sphere away from the equipment.',
   duration: 130,
   capacity: 130,
-  quota: [30, 62, 92],
+  quota: [45, 72, 92],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
-    { type: 'spikes', wall: 'floor', from: -3.0, to: 3.0, z: [-2.5, 2.5] },
-    { type: 'saw', wall: 'right', at: -3.4, z: [-2.5, 2.5], radius: 1.1, dir: -1 },
+    { type: 'spikes', wall: 'floor', from: -4.6, to: 4.6, z: [-2.5, 2.5] },
   ],
   waves: [
     { at: 1.5, count: 5, types: { standard: 4, inspector: 1 } },

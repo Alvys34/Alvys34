@@ -164,6 +164,7 @@ export const TUNABLES = {
       width: 2.4,              // mouth length along the wall (m)
       housing: 0.55,           // housing depth: the roller face stands this far off the wall (m)
       grabMargin: 0.22,        // parts this close to the roller face (and over the mouth) get grabbed
+      grabMaxSpeed: 2.5,       // ...if slower than this (m/s): hold the crowd on it, don't fling it across
       pull: 5.0,               // 1/s steering gain dragging held parts into the jaw
       pullMax: 3.5,            // m/s cap of the drag
       chewRate: 34,            // kg/s of meat the rollers swallow (standard donor ~63 kg ≈ 1.9 s)

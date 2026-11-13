@@ -139,6 +139,7 @@ async function flow(browser) {
   const sv = await save(page);
   check(sv && sv.best['shift-1'] && sv.best['shift-1'].liters > 0, 'best litres for shift 1 saved');
   check(sv && sv.progress.unlocked >= 2, 'shift 2 unlocked after a drop');
+  check(sv && sv.achievements && sv.achievements.FIRST_SHIFT > 0, 'achievement FIRST_SHIFT persisted (tracker -> save)');
   await key(page, 'Enter', 800); // Next shift
   check(await topScreen(page) === 'briefing', 'Next -> shift 2 briefing');
   await key(page, 'Enter', 700);
@@ -181,6 +182,68 @@ async function flow(browser) {
   await key(page, 'Enter', 600);
   check((await focusedText(page) || '').includes('Shift 2'), 'Clock in now targets shift 2');
   reportErrors(page, 'flow');
+  await page.context().close();
+}
+
+// =============================================================== overtime (real run to a dry tank)
+async function overtime(browser) {
+  console.log('\n== overtime run 1280x720');
+  const page = await newPage(browser, 1280, 720, { storage: JSON.stringify({ version: 1, progress: { unlocked: 4 }, initials: 'ABC', overtime: [{ liters: 9999, time: 999, initials: 'TOP', date: 'a' }] }) });
+  await open(page);
+  await key(page, 'Enter', 600);
+  await key(page, 'ArrowDown'); await key(page, 'ArrowDown');
+  check((await focusedText(page) || '').startsWith('Overtime'), 'Overtime row reachable');
+  await key(page, 'Enter', 700);
+  check(await topScreen(page) === 'briefing', 'Overtime -> briefing');
+  await shot(page, 'ot-01-briefing');
+  await key(page, 'Enter', 700);
+  check((await state(page)).levelId === 'overtime', 'Overtime running');
+  await page.evaluate(() => window.__edc.setTimeScale(0));
+  for (let i = 0; i < 40; i++) {
+    const st = await page.evaluate(() => { window.__edc.step(300, false); return window.__edc.getState(); });
+    if (st.status === 'ended') break;
+  }
+  await page.waitForFunction(() => window.__edc.getState().screen === 'results', null, { timeout: 240000 });
+  await sleep(800);
+  check(await topScreen(page) === 'overtime-report', 'tank dry -> Overtime report');
+  check((await focusedText(page) || '').replace(/\s/g, '') === 'ABC', 'initials prefilled from last time, focused');
+  await key(page, 'KeyZ', 150); await key(page, 'ArrowDown', 150); // Z, then next slot B -> C
+  await shot(page, 'ot-02-report-initials');
+  await key(page, 'Enter', 400);
+  const sv = await save(page);
+  const me = sv.overtime.find((e) => e.initials === 'ZCC');
+  check(!!me && sv.overtime.length === 2 && sv.overtime[0].initials === 'TOP', `entry signed into the local top-10 (${sv.overtime.map((e) => e.initials).join(',')})`);
+  check(sv.initials === 'ZCC', 'initials remembered');
+  await shot(page, 'ot-03-report-signed');
+  reportErrors(page, 'overtime');
+  await page.context().close();
+}
+
+// =============================================================== hold-R restart + focus-loss pause
+async function misc(browser) {
+  console.log('\n== hold-R restart, focus loss, resize 1280x720');
+  const page = await newPage(browser, 1280, 720, { storage: '' });
+  await open(page, '&autopause=1');
+  await key(page, 'Enter', 500); await key(page, 'Enter', 600); await key(page, 'Enter', 600);
+  check((await state(page)).screen === 'playing', 'playing shift 1');
+  await page.evaluate(() => window.__edc.setTimeScale(0));
+  await step(page, 300, 0);
+  const t0 = (await state(page)).time;
+  await page.keyboard.down('KeyR');
+  await page.waitForFunction((t) => window.__edc.getState().time < t, t0, { timeout: 120000 });
+  await page.keyboard.up('KeyR');
+  check((await state(page)).screen === 'playing', 'hold R restarts the shift (sim clock reset)');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await sleep(300);
+  check((await state(page)).screen === 'paused', 'window blur auto-pauses');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await sleep(800);
+  check((await focusedText(page) || '').startsWith('Resume'), 'resize keeps menu focus');
+  await key(page, 'Escape', 500);
+  check((await state(page)).screen === 'playing', 'Esc resumes');
+  await step(page, 30, 10);
+  await shot(page, 'misc-resized-1920');
+  reportErrors(page, 'misc');
   await page.context().close();
 }
 
@@ -317,8 +380,7 @@ async function screens(browser) {
     await sleep(700);
     await shot(page, `${tag}-12-credits`);
     await key(page, 'Escape', 400);
-    await page.evaluate(() => window.__edc.ui.debug.toast({ title: 'Commendation', name: 'First Drop', kind: 'ach' }));
-    await sleep(600);
+    await page.evaluate(() => window.__edc.ui.debug.toast({ title: 'Commendation', name: 'Orientation Complete', kind: 'ach', ms: 120000 }));
     await shot(page, `${tag}-13-toast`);
     // Overtime HUD
     await page.evaluate(() => { window.__edc.startOvertime(); window.__edc.setTimeScale(0); window.__edc.setInput({ rotate: 0.6 }); });
@@ -347,9 +409,50 @@ async function screens(browser) {
     page.evaluate(() => window.__edc.ui.debug.playEnding());
     await sleep(4200);
     await shot(page, `${tag}-18-ending-pa`);
-    await sleep(9000);
+    await page.waitForFunction(() => document.querySelector('.ending.dropping'), null, { timeout: 60000 });
+    await sleep(1800);
     await shot(page, `${tag}-19-ending-drop`);
     reportErrors(page, tag);
+    await page.context().close();
+  }
+}
+
+// =============================================================== extras: callouts, toast, ending drop
+async function extras(browser) {
+  for (const [w, h] of SIZES) {
+    const tag = `${w}x${h}`;
+    console.log(`\n== extras ${tag}`);
+    const page = await newPage(browser, w, h, { storage: SEED_SAVE });
+    await open(page, '&autostart=2');
+    await page.evaluate(() => window.__edc.setTimeScale(0));
+    await page.evaluate(() => window.__edc.setInput({ rotate: 1 }));
+    await step(page, 150, 0);
+    await page.evaluate(() => window.__edc.setInput({ rotate: -1, slam: true }));
+    await step(page, 300, 0);
+    await page.evaluate(() => window.__edc.setInput(null));
+    await step(page, 60, 20);
+    // keep the short-lived callouts on screen for the (slow) software screenshot
+    await page.evaluate(() => {
+      window.__realSetTimeout = window.setTimeout;
+      window.setTimeout = (f, ms, ...a) => (ms >= 1000 ? 0 : window.__realSetTimeout(f, ms, ...a));
+      const sc = window.__edc.sim.ctx.scoring; sc.combo.count = 4; sc.combo.multiplier = 4; sc.combo.timer = 1.6;
+      const b = window.__edc.bus;
+      b.emit('combo', { count: 4, multiplier: 4 });
+      b.emit('bonus', { liters: 20, reason: 'inspector-survived' });
+      b.emit('fine', { liters: 25, reason: 'workplace-incident' });
+      b.emit('achievement', { id: 'SPONSOR_MATCH_8' });
+      b.emit('pa:announce', { text: 'The tank is nearly full. Please remain calm and productive.', mood: 'glitch' });
+    });
+    await sleep(2500);
+    await shot(page, `${tag}-20-hud-callouts`);
+    await page.evaluate(() => { window.setTimeout = window.__realSetTimeout; });
+    check(await page.evaluate(() => document.querySelectorAll('.feed-row').length >= 2), `${tag}: bonus/fine callouts shown`);
+    check(await page.evaluate(() => JSON.parse(localStorage.getItem('edc.save.v1')).achievements.SPONSOR_MATCH_8 > 0), `${tag}: achievement event persisted`);
+    page.evaluate(() => window.__edc.ui.debug.playEnding());
+    await page.waitForFunction(() => document.querySelector('.ending.dropping'), null, { timeout: 120000 });
+    await sleep(1500);
+    await shot(page, `${tag}-19-ending-drop`);
+    reportErrors(page, `extras ${tag}`);
     await page.context().close();
   }
 }
@@ -358,8 +461,11 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 try {
   if (!ONLY || ONLY === 'flow') await flow(browser);
   if (!ONLY || ONLY === 'pad') await pad(browser);
+  if (!ONLY || ONLY === 'overtime') await overtime(browser);
+  if (!ONLY || ONLY === 'misc') await misc(browser);
   if (!ONLY || ONLY === 'corrupt') await corrupt(browser);
   if (!ONLY || ONLY === 'screens') await screens(browser);
+  if (!ONLY || ONLY === 'extras') await extras(browser);
 } finally {
   await browser.close();
 }

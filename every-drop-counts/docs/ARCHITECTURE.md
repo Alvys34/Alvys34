@@ -193,3 +193,20 @@ draw-call / triangle counts instead (`renderer.info`).
 - Production build is a single classic IIFE script (`vite.config.js`) so `dist/index.html` runs
   from `file://`. Interfaces for later agents: `src/sim/README.md`, `src/render/README.md`,
   `src/ui/README.md`.
+
+## Implementation notes (UI, Phase 2) — additive
+
+- App flow lives in `src/ui/index.js` (`createUI`); `main.js` only forwards the loop to it. Details and
+  the flow map: `src/ui/README.md`.
+- The sim is created with a **gated bus** (`createSimBus(bus)` in `src/ui/attract.js`). Menus run the
+  sim in attract mode with the gate closed, so `shift:start`, impacts, speech etc. from the attract
+  scene never reach audio/VFX/achievements. Anything that must hear real gameplay only: listen on the
+  main bus as before (nothing changes for you).
+- Extra events: UI emits `ending:start {}` when the shift-8 sting hands over to the camera (VFX: a
+  `view.playEnding()` hook would replace the CSS fallback push-in). `achievement {id}` is persisted,
+  toasted and forwarded to Steam by the UI (`src/ui/systems.js`), which also creates CONTENT's tracker.
+- `ui:star {n}` fires as each drop lands on the shift report; `game:pause {paused}` on pause/resume.
+- `__edc.getState().screen` is the UI mode (`boot|menu|briefing|playing|paused|results|ending`);
+  `__edc.ui.debug` has helpers for screenshots; `?autopause=1` re-enables focus-loss pause in debug.
+- Save schema (`edc.save.v1`, `src/core/save.js`): every field is sanitised on load; unreadable JSON is
+  kept under `edc.save.v1.corrupt` and replaced; `MIGRATIONS[n]` upgrades raw saves from version n.

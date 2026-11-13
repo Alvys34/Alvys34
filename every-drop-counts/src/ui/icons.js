@@ -20,7 +20,7 @@ const P = {
   tank: '<rect x="7" y="6" width="10" height="15.5" rx="4"/><path d="M10 6V3.5h4V6"/><path d="M7 11h10"/><path d="M15 3.5h3"/>',
   crusher: '<path d="M3 3h18"/><path d="M12 3v4"/><rect x="5" y="7" width="14" height="5" rx="1"/><path d="M7 15l-1 2M12 15v2.4M17 15l1 2"/><path d="M3 21h18"/>',
   badge: '<rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9.5 4V2.5h5V4"/><circle cx="12" cy="10.5" r="2.6"/><path d="M8.5 17.2c.6-1.9 2-2.8 3.5-2.8s2.9.9 3.5 2.8"/>',
-  pump: '<path d="M4 20.5V9a5 5 0 0 1 10 0v11.5"/><path d="M2.5 20.5h13"/><path d="M14 11h3.5c1.4 0 2.5 1.1 2.5 2.5V16"/><path d="M20 19.2c0 .9-.7 1.6-1.6 1.6s-1.5-.7-1.5-1.6c0-1 1.5-2.7 1.5-2.7s1.6 1.7 1.6 2.7z" fill="currentColor"/>',
+  pump: '<rect x="4.5" y="2.5" width="15" height="14" rx="3"/><path d="M4.5 11h15"/><path d="M12 16.5v1.8"/><path d="M12 19.4c.9 0 1.5.6 1.5 1.3 0 .8-.7 1.3-1.5 1.3s-1.5-.5-1.5-1.3c0-.7.6-1.3 1.5-1.3z" fill="currentColor"/><path d="M8 7.2h3"/>',
   speaker: '<path d="M4 9.5h3.5L12.5 5v14l-5-4.5H4z"/><path d="M15.8 9a4.2 4.2 0 0 1 0 6"/><path d="M18.6 6.4a8 8 0 0 1 0 11.2"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10.5" rx="2.2"/><path d="M8.2 10.5V7.6a3.8 3.8 0 0 1 7.6 0v2.9"/><path d="M12 14.6v2.4"/>',
   check: '<path d="M4.5 12.8l4.6 4.6 10.4-10.8"/>',

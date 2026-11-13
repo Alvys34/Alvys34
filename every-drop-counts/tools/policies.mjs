@@ -140,16 +140,40 @@ function smartPolicy(s, t, mem) {
 
   // --- choose / keep a target hazard + tactic
   mem.until = mem.until || 0;
+  // stick with a hazard while it is producing (each kill extends the plan a little)
+  const kills = s.scoring.kills;
+  if (kills > (mem.kills || 0)) { mem.kills = kills; mem.lastKillT = t; if (mem.plan) mem.until = Math.min(Math.max(mem.until, t + 4), (mem.planT || t) + 20); }
+  // boredom: a hazard that has not produced a kill for a while is dropped for 15 s
+  mem.bored = mem.bored || new Map();
+  if (mem.plan && mem.plan.h && crowd.length && t - Math.max(mem.lastKillT || 0, mem.hStart || 0) > 12) {
+    mem.bored.set(mem.plan.h, t + 15);
+    mem.until = 0;
+    mem.hStart = t; // even if it is chosen again (only option), give it a fresh 12 s
+  }
+  if (inspectors.length !== (mem.nInsp || 0)) { mem.nInsp = inspectors.length; mem.until = 0; }
   if (!mem.plan || t > mem.until || (mem.plan.h && !s.hazards.includes(mem.plan.h))) {
+    mem.planT = t;
+    const prevH = mem.plan && mem.plan.h;
     mem.plan = choosePlan(s, crowd, inspectors, mem);
+    if (mem.plan.h !== prevH) mem.hStart = t;
     if (DEBUG) console.error(`t=${t.toFixed(1)} plan ${mem.plan.tactic} ${mem.plan.h ? mem.plan.h.type + '#' + mem.plan.h.id : ''} target=${(mem.plan.target ?? 0).toFixed(2)} theta=${s.drum.theta.toFixed(2)} crowd=${crowd.length} fill=${s.pool.fill.toFixed(2)}`);
     mem.until = t + mem.plan.duration;
     mem.phase = 0; mem.phaseT = t;
   }
   const plan = mem.plan;
   if (!crowd.length) {
-    // nothing to process: settle level-ish and wait for the hatch (keeps floor down, cheap)
-    const r = steer(s, plan.wait ?? d.theta, { maxW: 1.2 });
+    // nothing to process: pre-position (machinery face down before the hatch opens = donors fall
+    // straight onto it), going the safe way round if an Inspector is expected
+    let dir = 0;
+    if (inspectorExpected(s) && plan.h) {
+      const e0 = wrap(plan.wait - d.theta);
+      for (const e of [e0, e0 > 0 ? e0 - TAU : e0 + TAU]) {
+        let ok = true;
+        for (let k = 1; k <= 8 && ok; k++) if (lowHazard(s, d.theta + (e * k) / 8, plan.h)) ok = false;
+        if (ok) { dir = Math.sign(e); break; }
+      }
+    }
+    const r = steer(s, plan.wait ?? d.theta, { maxW: 1.2, dir });
     return { rotate: r.rotate, brake: r.brake || Math.abs(d.omega) > 0.3, slam: false };
   }
   let out;
@@ -159,6 +183,17 @@ function smartPolicy(s, t, mem) {
     case 'press': out = tacticPress(s, t, mem, plan, crowd); break;
     case 'waterline': out = tacticWaterline(s, t, mem, plan, crowd); break;
     default: out = tacticTilt(s, t, mem, plan, crowd); break;
+  }
+  // long trips with an Inspector aboard: go the way round that never makes another hazard the low point
+  if ((inspectors.length || inspectorExpected(s)) && plan.h && Math.abs(wrap(plan.target - d.theta)) > 1.0) {
+    const errs = [wrap(plan.target - d.theta)]; errs.push(errs[0] > 0 ? errs[0] - TAU : errs[0] + TAU);
+    let safe = null;
+    for (const e of errs) {
+      let ok = true;
+      for (let k = 1; k <= 8 && ok; k++) if (lowHazard(s, d.theta + (e * k) / 8, plan.h)) ok = false;
+      if (ok) { safe = Math.sign(e); break; }
+    }
+    if (safe) { const r = steer(s, plan.target, { dir: safe, maxW: 1.4 }); out = { ...out, rotate: r.rotate, brake: r.brake }; }
   }
   // impaled donors that are drained: shake them loose (re-drop); fresh ones keep bleeding
   if (d.slamCooldown <= 0 && !slam && plan.tactic !== 'slamUp') {
@@ -187,42 +222,70 @@ function choosePlan(s, crowd, inspectors, mem) {
     let target = angleDown(x, y);
     let score = VALUE[h.type] || 1;
     // the pool: a hazard at the bottom is under the surface once the tank fills up
-    const submerged = hazardSubmerged(s, x, y, target);
+    const submerged = hazardSubmerged(s, x, y, target, h.type === 'spikes' ? 1.4 : 0.4);
     if (submerged) {
       // the pool covers it at its own "down" angle: find an angle where it sits AT the waterline
       // (floaters drift into it), else use it from above (slam the floating crowd up into it)
-      const wl = h.type === 'crusher' ? null : waterlineAngle(s, x, y);
+      const wl = h.type === 'crusher' || h.type === 'spikes' ? null : waterlineAngle(s, x, y);
       const head = headroomTo(s, x, y);
       if (wl != null) { tactic = 'waterline'; target = wl; score *= 1.0; }
       else if (head < 5.5) { tactic = 'slamUp'; target = wrap(target + Math.PI); score *= 1.1; } else score *= 0.25;
     }
     if (h.type === 'grinder' && h.view.clogged) score *= 1.5;
     if (h.type === 'crusher' && fill > 0.35) score *= 0.4;
-    // the Inspector: never park him on a hazard
+    // the Inspector: never park him on a hazard; only spike beds are safe for a rolling sphere
+    if ((inspectors.length || inspectorExpected(s)) && h.type !== 'spikes') score *= 0.15;
     for (const q of inspectors) {
       const dist = Math.hypot(q.x - x, q.y - y);
       if (dist < 4.5) score *= 0.15;
       // a tilt sends the sphere (it rolls fast) to the same low point as the hazard
       if (tactic === 'tilt' || tactic === 'drop') score *= 0.55;
     }
-    // prefer hazards that need less rotation (time is product)
+    // prefer hazards that need less rotation and are close to the crowd (time is product)
     score *= 1 - 0.18 * Math.abs(wrap(target - d.theta)) / Math.PI;
+    if (crowd.length) {
+      let cx = 0; let cy = 0;
+      for (const c of crowd) { cx += c.x; cy += c.y; }
+      score *= 1 - 0.03 * Math.min(12, Math.hypot(cx / crowd.length - x, cy / crowd.length - y));
+    }
     // variety: don't hammer the same hazard forever
     if (mem.plan && mem.plan.h === h) score *= 0.8;
+    if (mem.bored && (mem.bored.get(h) || 0) > s.time) score *= 0.05;
     score *= 0.9 + 0.2 * ((Math.sin(s.time * 7.3 + h.id * 13.1) + 1) / 2);
     if (!best || score > best.score) best = { h, tactic, target, score };
   }
   if (!best) return { tactic: 'none', duration: 2, wait: d.theta };
-  best.inspector = inspectors.length > 0;
+  best.inspector = inspectors.length > 0 || inspectorExpected(s);
   const duration = { drop: 7, tilt: 8, press: 11, slamUp: 7, waterline: 6 }[best.tactic];
   return { ...best, duration, wait: best.target };
 }
 
-function hazardSubmerged(s, x, y, theta) {
+function hazardSubmerged(s, x, y, theta, margin = 0.4) {
   if (s.pool.fill < 0.08) return false;
   const level = solveLevel(theta, 8, 5, s.pool.fill * 160);
   const h = Math.sin(theta) * x + Math.cos(theta) * y;
-  return h < level - 0.4;
+  return h < level - margin;
+}
+
+function inspectorAlive(s) { return s.donors.some((d) => d.mustSurvive && d.alive) || inspectorExpected(s); }
+
+/** the shift briefing says an Inspector is coming (and one has not been dealt with yet) */
+function inspectorExpected(s) {
+  const w = s.level && s.level.waves;
+  if (!w || !w.some((x) => x.types && !Array.isArray(x.types) && x.types.inspector)) return false;
+  return s.donors.filter((d) => d.mustSurvive).length === 0 || s.donors.some((d) => d.mustSurvive && d.alive);
+}
+
+/** true if, at drum angle th, some hazard other than `except` sits near the lowest point of the drum. */
+function lowHazard(s, th, except) {
+  const ux = Math.sin(th); const uy = Math.cos(th);
+  const lowest = -(Math.abs(ux) * 8 + Math.abs(uy) * 5);
+  for (const h of s.hazards) {
+    if (h === except) continue;
+    const [x, y] = hazardPoint(h);
+    if (ux * x + uy * y < lowest + 2.6) return true;
+  }
+  return false;
 }
 
 /** drum angle (closest to the current one) that puts point (x,y) just above the pool surface. */
@@ -252,10 +315,35 @@ function headroomTo(s, x, y) {
 /** spikes: agitate with the bed down (falls + flings onto it); every few seconds a full flip drop. */
 function tacticDrop(s, t, mem, plan) {
   if (mem.phase === 0) { // agitate around bed-down, slam to re-drop them onto it
+    // a spike bed only hurts what falls on it and a slam barely lifts the heavy sphere: no need to
+    // be gentle around the Inspector here, only when the bed has a sphere sitting right on it mid-drop
+    // with an Inspector aboard: hold the bed level and re-drop by slamming (the heavy ball barely
+    // lifts); swinging rolls his sphere around and drops it off walls
+    const gentle = plan.inspector && inspectorAlive(s);
+    const amp = gentle ? 0.12 : 0.9;
     const ph = Math.floor((t - mem.phaseT) / 1.2) % 2;
-    const r = steer(s, plan.target + (ph ? 0.6 : -0.6), { k: 6 });
-    if (t - mem.phaseT > 5.5 && !plan.inspector) { mem.phase = 1; mem.phaseT = t; }
-    return { ...r, slam: s.drum.slamCooldown <= 0 && Math.abs(wrap(plan.target - s.drum.theta)) < 0.8 };
+    // with an Inspector around, never swing toward a side that makes another hazard the low point
+    // (his ball rolls there first)
+    let side = ph ? amp : -amp;
+    if (plan.inspector && lowHazard(s, plan.target + side, plan.h)) side = (ph ? 1 : -1) * 0.12;
+    if (gentle) { const r0 = steer(s, plan.target + side, { k: 3, maxW: 1.2 }); return { ...r0, slam: s.drum.slamCooldown <= 0 && Math.abs(r0.err) < 0.5 }; }
+    const r = steer(s, plan.target + side, { k: 6 });
+    // (full flips were tried: they mostly pin the crowd and cost time — the flipper bot proves it)
+    let slam = false;
+    if (s.drum.slamCooldown <= 0 && Math.abs(wrap(plan.target - s.drum.theta)) < 1.0) {
+      if (!gentle) slam = true;
+      else { // only when a good part of the crowd is lying over the bed
+        const v = plan.h.view; let over = 0; let n = 0;
+        for (const c of product(s)) {
+          n++;
+          const tc = v.t[0] * c.x + v.t[1] * c.y;
+          const hgt = v.n[0] !== 0 ? Math.abs(c.x - (v.n[0] > 0 ? -8 : 8)) : Math.abs(c.y - (v.n[1] > 0 ? -5 : 5));
+          if (tc > v.from && tc < v.to && hgt < 1.6) over++;
+        }
+        slam = n > 0 && over / n >= 0.35;
+      }
+    }
+    return { ...r, slam };
   }
   if (mem.phase === 1) { // bring the bed up (crowd falls to the opposite wall)
     const r = steer(s, plan.target + Math.PI, { maxW: 2.2, k: 6 });
@@ -278,17 +366,12 @@ function tacticDrop(s, t, mem, plan) {
  */
 function tacticTilt(s, t, mem, plan, crowd) {
   const grinder = plan.h.type === 'grinder';
-  const amp = grinder ? 0.3 : 0.8;
+  const amp = grinder ? 0.3 : 0.9;
   const period = grinder ? 3.0 : 2.4;
   const ph = Math.floor((t - mem.phaseT) / (period / 2)) % 2;
   const r = steer(s, plan.target + (ph ? amp : -amp), { k: grinder ? 3 : 6 });
   let slam = false;
-  if (s.drum.slamCooldown <= 0 && !grinder) {
-    const [hx, hy] = hazardPoint(plan.h);
-    let near = 0;
-    for (const c of crowd) if (Math.hypot(c.x - hx, c.y - hy) < 3.5) near++;
-    if (near >= 1) slam = true;
-  }
+  if (s.drum.slamCooldown <= 0 && !grinder) slam = true;
   return { ...r, slam };
 }
 

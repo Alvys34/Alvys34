@@ -58,7 +58,7 @@ async function boot() {
   const simBus = createSimBus(bus);
   const sim = createSim({ RAPIER, bus: simBus, seed });
   const quality = params.get('quality') || (save.settings.quality === 'auto' ? 'high' : save.settings.quality);
-  const view = createRenderer({ canvas, bus, settings: { ...save.settings, quality, preserveDrawingBuffer: DEBUG } });
+  const view = createRenderer({ canvas, bus, settings: { ...save.settings, quality, screenShake: ({ off: 0, reduced: 0.4, full: 1 })[save.settings.screenShake] ?? 1, preserveDrawingBuffer: DEBUG } });
   const input = createInput(window);
 
   const audio = await loadAudio();

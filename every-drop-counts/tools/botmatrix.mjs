@@ -53,14 +53,14 @@ for (const level of levels) {
   const rows = results.filter((r) => r.level === level);
   const q = rows.find((r) => r.quota) || {};
   console.log(`\n### Shift ${level}  quota ${JSON.stringify(q.quota || '')}`);
-  console.log('| policy | litres (per seed) | drops | time s | kills | drown | maxIdle s | fill@half | peak bodies | step ms mean/max |');
-  console.log('|---|---|---|---|---|---|---|---|---|---|');
+  console.log('| policy | litres (per seed) | drops | time s | kills | drown | insp. deaths | maxIdle s | fill@half | peak bodies | step ms mean/max |');
+  console.log('|---|---|---|---|---|---|---|---|---|---|---|');
   for (const policy of policies) {
     const rs = rows.filter((r) => r.policy === policy).sort((a, b) => a.seed - b.seed);
     if (!rs.length) continue;
     if (rs.some((r) => r.error)) { console.log(`| ${policy} | ERROR ${rs.find((r) => r.error).error} |`); continue; }
     const f = (k, dgt = 0) => rs.map((r) => (r[k] == null ? '-' : (+r[k]).toFixed(dgt))).join(' / ');
-    console.log(`| ${policy} | ${f('liters')} | ${f('stars')} | ${f('time')} | ${f('kills')} | ${f('drownings')} | ${f('maxIdle')} | ${f('fillHalf', 2)} | ${Math.max(...rs.map((r) => r.peakBodies))} | ${(rs.reduce((s, r) => s + r.stepMsMean, 0) / rs.length).toFixed(2)} / ${Math.max(...rs.map((r) => r.stepMsMax)).toFixed(1)} |`);
+    console.log(`| ${policy} | ${f('liters')} | ${f('stars')} | ${f('time')} | ${f('kills')} | ${f('drownings')} | ${f('inspectorDeaths')} | ${f('maxIdle')} | ${f('fillHalf', 2)} | ${Math.max(...rs.map((r) => r.peakBodies))} | ${(rs.reduce((s, r) => s + r.stepMsMean, 0) / rs.length).toFixed(2)} / ${Math.max(...rs.map((r) => r.stepMsMax)).toFixed(1)} |`);
   }
 }
 const jsonOut = get('json', null);

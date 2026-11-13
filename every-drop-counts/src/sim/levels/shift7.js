@@ -18,7 +18,7 @@ export default {
   lesson: 'Rhythm: line the crowd up under the press, time the rail saw.',
   duration: 140,
   capacity: 165,
-  quota: [52, 100, 140],
+  quota: [55, 140, 175],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

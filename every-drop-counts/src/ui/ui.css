@@ -393,7 +393,7 @@ body[data-mode='menu'] .bubble, body[data-mode='boot'] .bubble { font-size: 0.8r
 .initials-box.signed .initials .slot { background: var(--mint-soft); }
 .initials-box.signed .sign { display: none; }
 .ini-hint { margin: 0.5rem 0 0; font-size: 0.8rem; font-weight: 800; color: var(--ink-2); display: flex; align-items: center; gap: 0.3rem; }
-.initials-box.signed .ini-hint { visibility: hidden; }
+.initials-box.signed .ini-hint { display: none; }
 .rank-line { font-weight: 900; font-size: 1.05rem; margin: 0.3rem 0 0; }
 .ot-table { list-style: none; margin: 0; padding: 0; }
 .ot-table li { display: grid; grid-template-columns: 2.2rem 3.4rem 1fr auto; gap: 0.5rem; align-items: baseline; padding: 0.35rem 0.5rem; border-bottom: 0.13rem solid var(--rule); font-weight: 800; }

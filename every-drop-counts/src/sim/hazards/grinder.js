@@ -1,6 +1,6 @@
 /**
  * Grinder (GDD §7): a housing on a wall with two toothed counter-rotating rollers on its face.
- * Parts that touch the roller face over the mouth are GRABBED (dragged into the jaw, ground),
+ * Parts that rest on the roller face over the mouth (slower than grabMaxSpeed) are GRABBED (dragged into the jaw, ground),
  * then SWALLOWED one at a time at `chewRate` kg/s. A swallowed part's blood is converted 100 %
  * to litres over `convertTime` (~1.5 s) — the best yield in the game, but slow.
  * Too much meat in the mouth at once (> clogMass kg) JAMS the rollers: nothing is swallowed and
@@ -79,6 +79,8 @@ export default {
             if (held.length >= H.maxHeld) break;
             if (part.removed || part.encased || part.grinding) continue;
             if (!overMouth(part, 0.05) || gap(part) > H.grabMargin) continue;
+            // the rollers catch what LIES on them: bodies flung / sliding across the pit pass over
+            if (part.vx * part.vx + part.vy * part.vy + part.vz * part.vz > H.grabMaxSpeed * H.grabMaxSpeed) continue;
             part.grinding = true;
             held.push({ part, mass: part.mass });
           }

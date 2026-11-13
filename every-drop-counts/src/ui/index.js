@@ -353,15 +353,15 @@ export function createUI({ root, bus, simBus, sim, view, loop, input, audio, can
   }
 
   // ------------------------------------------------------------------ toasts
-  function toast({ title, name = '', kind = 'info' }) {
+  function toast({ title, name = '', kind = 'info', ms = 3800 }) {
     const t = document.createElement('div');
     t.className = `toast ${kind}`;
     t.innerHTML = `<span class="toast-ico">${icon(kind === 'ach' ? 'rosette' : 'check')}</span><span class="toast-main"><span class="toast-t">${esc(title)}</span>${name ? `<b>${esc(name)}</b>` : ''}</span>`;
     toasts.appendChild(t);
     while (toasts.children.length > 3) toasts.firstChild.remove();
     requestAnimationFrame(() => t.classList.add('in'));
-    setTimeout(() => t.classList.remove('in'), 3800);
-    setTimeout(() => t.remove(), 4300);
+    setTimeout(() => t.classList.remove('in'), ms);
+    setTimeout(() => t.remove(), ms + 500);
   }
 
   // ------------------------------------------------------------------ input routing

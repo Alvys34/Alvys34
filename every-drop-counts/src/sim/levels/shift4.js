@@ -6,8 +6,7 @@
  * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
  * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
  * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
- * Layout: the grinder is a pit in the middle of the far face, a saw and a spike bed either side of
- * it. Bring the face down, then tilt the crowd across the pit a few at a time.
+ * Layout: the grinder is a pit in the middle of the far face, a spike bed either side of it. Bring the face down, then tilt the crowd across the pit a few at a time.
  */
 export default {
   id: 'shift-4',
@@ -17,12 +16,12 @@ export default {
   lesson: 'The grinder converts every drop. Feed it slowly; SLAM clears a jam.',
   duration: 135,
   capacity: 135,
-  quota: [36, 70, 100],
+  quota: [40, 92, 120],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
     { type: 'grinder', wall: 'floor', at: 0, width: 2.6, z: [-2.2, 2.2] },
-    { type: 'saw', wall: 'floor', at: 5.0, z: [-2.5, 2.5], radius: 0.95, dir: 1 },
+    { type: 'spikes', wall: 'floor', from: 3.5, to: 6.5, z: [-2.5, 2.5] },
     { type: 'spikes', wall: 'floor', from: -6.5, to: -3.5, z: [-2.5, 2.5] },
   ],
   waves: [

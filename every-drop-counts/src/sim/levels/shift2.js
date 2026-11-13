@@ -16,7 +16,7 @@ export default {
   lesson: 'SLAM throws donors into whatever is above them.',
   duration: 125,
   capacity: 130,
-  quota: [26, 55, 80],
+  quota: [28, 72, 110],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [

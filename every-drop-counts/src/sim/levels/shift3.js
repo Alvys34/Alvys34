@@ -5,9 +5,9 @@
  * deliberate half-turn and controlled tilting (or a flip: let them fall 10 m onto it). Mindless
  * left-right mashing only ever slides the crowd along a side wall into a corner — never across the
  * middle of a face — so it stays out of the machinery (see the balance notes in src/sim/README.md).
- * Layout: a wide spike bed overhead that will be under the surface within a minute once it is down,
- * and two saws on long arms on the landing face — above the crowd at first, at the WATERLINE once the
- * tank fills (flip the drum and they hang over the pool). Living donors whose heads stay under for
+ * Layout: overhead, a wide spike bed flanked by two saws hanging 2.6 m off the far face on long arms.
+ * Bring the far face down and the bed is under the surface within a minute; leave the drum as it is
+ * and the rising tank lifts the floating crowd up to the hanging blades — the WATERLINE. Living donors whose heads stay under for
  * 6 s drown (no yield). Kill them before the tide does.
  */
 export default {
@@ -18,13 +18,13 @@ export default {
   lesson: 'The pool lifts everything. Bottom hazards drown; use the waterline.',
   duration: 125,
   capacity: 80,
-  quota: [34, 62, 86],
+  quota: [40, 110, 138],
   startAngle: Math.PI,
   hatch: { wall: 'back', x: 0, y: -1.0, offset: 1.2 },
   hazards: [
     { type: 'spikes', wall: 'floor', from: -3.0, to: 3.0, z: [-2.5, 2.5] },
-    { type: 'saw', wall: 'ceiling', at: -3.6, offset: 2.9, z: [-2.5, 2.5], radius: 1.15, dir: 1 },
-    { type: 'saw', wall: 'ceiling', at: 3.6, offset: 2.9, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
+    { type: 'saw', wall: 'floor', at: -4.2, offset: 2.6, z: [-2.5, 2.5], radius: 1.15, dir: 1 },
+    { type: 'saw', wall: 'floor', at: 4.2, offset: 2.6, z: [-2.5, 2.5], radius: 1.15, dir: -1 },
   ],
   waves: [
     { at: 1.5, count: 6 },

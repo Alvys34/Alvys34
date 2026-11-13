@@ -16,7 +16,7 @@ import { hints, overtimeRows } from './screens.js';
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const DUP = /^(litres collected|litres delivered|sponsor contributions|fines|time on the clock)\b/i;
+const DUP = /^(litres collected|litres delivered|sponsor contributions|fines|time on the clock|waves processed)\b/i;
 /** CONTENT's report lines (sim/modes/report.js) as { k, v }, minus what the breakdown already shows. */
 function contentLines(r) {
   const lines = r && r.report && Array.isArray(r.report.lines) ? r.report.lines : null;
