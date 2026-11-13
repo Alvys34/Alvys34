@@ -4,3 +4,6 @@ test-output/
 tools/out/
 *.log
 .DS_Store
+
+# Playtest scratch frames (contact sheets in docs/qa/img are kept)
+docs/qa/raw/
