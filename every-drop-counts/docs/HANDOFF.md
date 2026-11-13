@@ -1,152 +1,121 @@
-# EVERY DROP COUNTS — Handoff
+# EVERY DROP COUNTS — Handoff (2)
 
-Written for an agent (or person) picking this project up on a local machine with a real GPU.
-State as of commit `872ae07` on branch `ccr-567c397f-f3s53e`, 2026-11-13 ~15:40 UTC.
+For the local agent (or person) taking this over. The cloud session is finished: every cloud agent
+has been stopped and nothing else will be pushed from it. You own the whole tree now.
 
-## What this is
+State: branch `ccr-567c397f-f3s53e`, 2026-11-13 evening UTC. `npm test` 68/68 and `npm run build`
+pass on commit `544253a` (the code state this file describes). The desktop build was **not**
+re-run after fix round 2.
 
-A 3D physics splatter arcade game for Steam. The player operates a rotating "donation drum" full
-of ragdoll blood donors (two verbs: ROTATE and SLAM). Hazards on the drum walls cut, impale, grind
-and crush them; the blood spilled floods the drum as a level-seeking pool that makes bodies float,
-drowns donors and takes floor hazards out of play. Tone: cheerful clinical surface, appalling inside.
+## Read these first
 
-- Design: `docs/GDD.md` (pillars, loop, controls, scoring, the 8 shifts, production checklist).
-- Contracts and ownership: `docs/ARCHITECTURE.md` (event bus, audio, desktop bridge, save, debug
-  harness, desktop CSP constraints, plus notes each specialist appended).
-- Per-area detail: `src/sim/README.md`, `src/render/README.md`, `src/ui/README.md`,
-  `src/audio/README.md`, `desktop/README.md`.
-- Steam process and upload templates: `docs/STEAM_RELEASE.md`, `desktop/steam/`.
+1. `docs/qa/PLAYTEST-1.md` — independent review. Verdict: fun-shaped, not shippable. Blockers B1–B2,
+   majors M1–M7. This is still the task list; the table below says what is already addressed.
+2. `docs/local/LOCAL-REPORT-1.md` — your own real-GPU / Windows findings (§6 bug table).
+3. `docs/GDD.md` (design, LOCKED rules), `docs/ARCHITECTURE.md` (contracts), the per-area READMEs
+   in `src/sim`, `src/render`, `src/ui`, `src/audio`, `desktop`.
 
 ## Run it
 
 ```
 cd every-drop-counts
 npm install
-npm run dev          # http://localhost:5173  (add ?debug=1 for the window.__edc harness)
-npm test             # 34 headless sim tests (Node, no browser)
-npm run build        # static dist/, base './'
+npm run dev      # http://localhost:5173  (?debug=1 → window.__edc harness, ?seed=, ?autostart=)
+npm test         # 68 headless tests, ~2.5 min
+npm run build
+
+cd desktop && npm ci
+npm run build:release   # now uses a Node zip (yazl); build the Linux depot on Linux/WSL only
+npm run smoke           # Linux only (xvfb)
+npm run verify
 ```
 
-Desktop (separate package):
+Balance tools: `node tools/botmatrix.mjs --levels 1,2,3,4,5,6,7,8,overtime --seeds 3 --jobs 4
+--json out.json --compact` (policies: idle, spin, rock, smart, plus personas cautious, holder,
+masher, thinker), `node tools/simbot.mjs --level 5 --policy thinker`, `tools/qa/control.mjs`
+(drum response), `tools/camera-log.mjs`, `tools/qa/shaders.mjs` (program count, `?noprewarm=1` A/B).
 
-```
-cd every-drop-counts/desktop
-npm ci
-npm run build:release   # builds ../dist, then Windows x64 + Linux x64 folders and zips in release/
-npm run smoke           # launches the packaged Linux build (needs a display or xvfb-run)
-npm run verify          # static checks on both builds
-```
+## Hard rules
 
-Useful tools: `node tools/simbot.mjs --level 3 --policy smart` (one headless shift),
-`node tools/botmatrix.mjs` (policy × seed table), `tools/shot.mjs` / `tools/vfxshot.mjs` /
-`tools/ui-shots.mjs` (Playwright captures), `node tools/audio/run.mjs` (audio meters; `--wav`
-exports every sound for listening).
+- `src/sim/**` is headless (no three, no DOM, no wall-clock; runs in Node). Velocity changes only
+  through `addVelocity()` in `src/sim/physics.js`.
+- Desktop: served from `app://game/`, save key `edc.save.v1`, Electron userData folder name —
+  none of these may change. CSP: no inline script, no eval, no remote URLs.
+- Red is reserved for blood; blood colour only from `src/render/blood/palette.js`.
+- Content guardrails in GDD §2 are LOCKED (adults only, no real brands or people, stylised gore).
+- Existing bus event names are locked; additions go in the ARCHITECTURE event table.
 
-## Stack
+## Fix round 2 — what landed (cut short; the agents were stopped mid-wrap-up)
 
-Vite + plain JS ES modules. three.js (render), Rapier 3D compat (physics, WASM embedded), WebAudio
-synthesis (no sample files), HTML/CSS DOM UI, Nunito via `@fontsource-variable`. All art is
-code-generated. Electron wrapper in `desktop/` with optional steamworks.js. No network at runtime.
+Everything below is in the tree, compiles and has passing tests, but **none of it was seen in real
+time or re-playtested**, and the agents wrote no final reports. Treat "landed" as "needs your
+eyes", not "verified". Docs the agents were updating (ARCHITECTURE event table, READMEs) may lag
+the code.
 
-Hard rules that are easy to break:
-- `src/sim/**` is headless: no three, no DOM, no wall-clock. It must keep running in Node.
-- Sim code changes velocities only through `addVelocity()` in `src/sim/physics.js`.
-- Desktop CSP: no inline `<script>`, no `eval`/`new Function`, no remote URLs. The game is served
-  from `app://game/`; saves are tied to that origin, so it must never change after release.
-- Red is reserved for blood. All blood colour comes from `src/render/blood/palette.js`.
-
-## What is built
-
-| Area | State | Verified how |
+| Item | State | Where / how to check |
 |---|---|---|
-| Sim: drum in rotating frame, ragdolls, damage, clotting blood model, pool with buoyancy | Done | `npm test` 34/34 |
-| Hazards: spikes, saw, rail saw, grinder, crusher | Done | Tests + screenshots |
-| Donors: standard, Big Giver, Thin-Blood, Inspector in safety sphere; oxygen tanks | Done | Tests + screenshots |
-| Shifts 1–8, Overtime, 14 achievements | Done, two balance rounds | Bot matrix (below) |
-| Blood VFX, pool liquid, adaptive camera, post, quality presets, GPU fallbacks | Done, one polish round | Software-rendered screenshots only |
-| Art: facility, drum, lighting escalation, donors, hazards, props | Done, one polish round | Software-rendered screenshots only |
-| UI: boot, title, shift select, briefing, HUD, pause, settings, report, records, credits, ending | Done | Driven by keyboard and simulated gamepad in Playwright |
-| Audio: every bus event, adaptive muzak, mix/limiter | Done | Meters only — nobody has listened to it |
-| Desktop wrapper and build pipeline | Done | Linux smoke passed against a placeholder page; real-game build in progress |
+| B1 brand rename | Landed. Provisional name **SUNNYVEIN** (one web search found no such brand; not legally cleared; owner has not confirmed). Single source `src/core/brand.js`; grep for the old name is clean outside `docs/local` and `docs/qa`. | Check sign letter spacing in `src/render/environment/textures.js`. Docs, store text and desktop metadata are plain text: rename by hand if the name changes. |
+| M4 drum handling | Landed. Full-speed release stops in ~12° / 0.23 s, 0.25 s tap ~16° total, Brake ~3.5°. | `T.drum.coastDamping / settleDecel / holdDamping`, `tests/handling.test.mjs`. **Feel is unjudged — play it.** |
+| M2 pool fill curve | Landed. Shift mode maps litres → fill by quota: deep by q1, cap only at 1.15 × q3. Overtime keeps real volume. | `src/sim/pool.js`, `tests/systems.test.mjs`. |
+| M2 drowning | Landed. Live donors float low; `donor.drown01`; event `donor:drowning`; `wasted` litres on drowning deaths; air-gauge meter over heads (`src/render/donors/drown.js`); gurgle sound; "−X L wasted" popup. | Sanity matrix: mashers lose 14–30 % of product on shifts 2–4 and 6, thinker 0–17 %. |
+| M6 waves | Landed. Regular waves open on clear OR after a gap; timed arrivals keep their time. `maxIdle` is 4 s on every shift. | `src/sim/modes/shift.js`. |
+| B2 Inspector bonus rule | Landed. Bonus is held until donor litres reach q1; otherwise withheld (`result.complianceWithheld`, event `bonus:withheld`, report line). Idle on shift 5 now scores 0. | `src/sim/scoring.js`. **Shift 5 itself was not reworked — see below.** |
+| M3 camera | Landed. Constant framing (drum's circumscribed circle); gentle tighten at rest ≤ 1.25×; ease-out ≤ 0.28/s. | `src/render/camera.js`, `tests/camera.test.mjs`, stills `docs/progress/fix2-camera-*.png`. Motion unjudged. |
+| Shader precompile | Code landed and wired (`src/render/precompile.js`, `view.warming` holds the sim). **Verification unfinished**: the agent's last note still listed lazy compiles at 7 s, 11.7 s and 16.3 s; it is unclear whether that run had the warm-up on. | Run `tools/local/hitch-probe.mjs` and `tools/qa/shaders.mjs` on a real GPU. |
+| Quality governor | Landed with 10 unit tests: pixel-ratio-first when GPU-bound, kept across presets, immediate step when > 2× over budget, boot benchmark for `auto`, hysteresis. | `src/render/quality.js`, `tests/quality.test.mjs`. Re-run your iGPU governor test. |
+| Late-shift readability | Landed: self-lit yellow/black hazard marks, wall/glass paint caps, fewer and fatter runners, emergency tint from 28–52 % fill, clearer safety sphere. Only one still was taken (`docs/progress/fix2-read-s5-inspector.png`). | `src/render/README.md` "Readability (fix 2)". Needs a real-GPU look at late shift 7 and Overtime. |
+| M5 teaching UI | Landed: `level.lesson` and "new this shift" callouts on the briefing, contextual Brake/Slam prompts with saved counters, prompts moved off the play area, shift-1 PA lines no longer contradict. | `src/ui/briefing.js`, stills `docs/progress/fix2-ui-*.png`. |
+| Overtime demand meter | Landed: `demandTier` + `demandRate` from the sim, HUD shows tier and rate. | `src/sim/modes/overtime.js`, `src/ui/hud.js`. |
+| UI polish | Landed: bubble overlap cap, report headline keyed by drops, quality order Low→Auto, future-version save backup, favicon, HUD first frame. | `tests/ui.test.mjs`. |
+| Desktop | Landed: Node zip in `desktop/scripts/build.mjs` (fixes Windows `zip ENOENT`), log handling for a second instance in `desktop/src/main.js`. | **Not built or smoke-tested since.** |
 
-## In flight when this was written (cloud session)
+## Not done — your task list, in priority order
 
-Two agents were still running in the cloud session and pushing to this branch. Pull before you
-start, and expect their changes to land in these areas:
+1. **Shift 5 is now unpassable (progression blocker).** With the bonus rule in place and the
+   layout unchanged, one-seed results against quota [45, 68, 76]: smart 31 L, thinker 19 L,
+   masher 21 L — 0 drops for everyone. Shift 5 gates 6–8. Rework the layout per PLAYTEST-1 B2
+   (give the Inspector his own lane or a safe ledge; the floor is one spike bed today) and retune
+   the quota. Target: idle 0 drops, thinker ≥ 1 drop on 3 seeds, careful play beats sloppy play.
+2. **Rebalance every shift.** Handling, the fill curve and drowning changed under unchanged
+   quotas. One-seed sanity run (`docs/qa/botmatrix-fix2-quick.json`), litres / drops:
 
-1. **Integration agent** — closing cross-system seams, then the first real desktop build. Its list:
-   reduce-flashing setting ignored by `src/render/post.js`; no `view.playEnding()` camera move for
-   the shift-8 ending (UI falls back to CSS); audio scaling never calibrated against real sim
-   payloads; `state.hasSaw` / `state.hasGrinder` and the `crusher:stroke` / `grinder:swallow`
-   events not wired to sounds; audio pre-render hitch (~1–1.4 s of CPU after unlock); HUD corner
-   plates covering drum corners at 1280×720; shift 1/2 PA lines naming keyboard keys; possible
-   hard-coded head size in `src/render/donors/bodyparts.js`; reset-progress not reseeding the
-   achievement tracker. Touches `src/render`, `src/audio`, `src/ui`, `src/main.js`, `desktop/`.
-2. **Playtest agent** — read-only on the game. Writes `docs/qa/PLAYTEST-1.md` with a prioritised
-   blocker/major/minor list and evidence in `docs/qa/img/`. That report is the input to the next
-   fix round; if it exists when you read this, start there.
+   | Shift (quota) | idle | masher | thinker | smart |
+   |---|---|---|---|---|
+   | 1 (6/35/48) | 0 | 18 / 1 | 54 / 3 | 56 / 3 |
+   | 2 (24/70/105) | 0 | 77 / 2 | 82 / 2 | 104 / 2 |
+   | 3 (40/135/150) | 0 | 116 / 1 | 152 / 3 | 144 / 2 |
+   | 4 (40/95/110) | 0 | 91 / 1 | 105 / 2 | 116 / 3 |
+   | 5 (45/68/76) | 0 | 21 / 0 | 19 / 0 | 31 / 0 |
+   | 6 (45/115/130) | 3 / 0 | 100 / 1 | 104 / 1 | 106 / 1 |
+   | 7 (55/145/185) | 0 | 141 / 1 | 186 / 3 | 116 / 1 |
+   | 8 (55/125/150) | 1 / 0 | 162 / 3 | 117 / 1 | 149 / 2 |
 
-## Balance (latest 3-seed bot matrix, drops earned)
+   Reading: shifts 3, 4 and 7 now separate mashing from intent; shift 8 still rewards mashing
+   (M1, M6); shift 6 is too tight; shift 1's q1 of 6 L is still passable by accident (M5).
+   The full 3-seed matrix with all personas and Overtime was never run — run it first.
+3. **Overtime** was not retuned (M1: mindless play reached ~75 % of the smart bot) and the
+   harder debris cap for > 300 bodies (M7) was not started.
+4. **Shift 2 teaching moment** (scripted "Turn them over." beat) and ceiling-slam teaching (M2,
+   M5) were not started. Level layouts for shifts 3 and 4 (PLAYTEST-1 M1 directions) untouched.
+5. **Not confirmed either way:** green-blood HUD values, fullscreen setting sync from
+   `edcDesktop`, donor outline cost on the low preset, the five missing store asset sizes in
+   `docs/STEAM_RELEASE.md`. Check each before assuming.
+6. **Rebuild and smoke the desktop app** on Windows and Linux after the above.
+7. **Play it.** 15 minutes with sound on a real GPU, using the checklist at the end of
+   PLAYTEST-1. Handling, camera, audio mix and gore tone have never been judged by a person.
+8. **Second independent playtest**, then repeat until it finds no blockers.
 
-Quotas are per shift in `src/sim/levels/shiftN.js`; all tunables in `src/core/tunables.js`.
+## Release items (owner decisions)
 
-| Shift | idle | careless (rock / spin / slam-spam) | smart bot |
-|---|---|---|---|
-| 1 Orientation | 0 | 1 for any active play; 0 for pure max spin | 3 / 2 / 3 |
-| 2 Sharp Objects | 0 | 0–1 | 3 / 3 / 3 |
-| 3 High Tide | 0 | 1 | 3 / 3 / 3 |
-| 4 The Good Machine | 0 | 0–1 | 3 / 3 / 1 |
-| 5 Compliance | 0 | 0–1 (rockers kill the Inspectors) | 3 / 3 / 3 |
-| 6 Breathe Easy | 0 | 1–2 | 3 / 3 / 2 |
-| 7 Rush Hour | 0 | 1 (slam-spam 2 on one seed) | 3 / 2 / 3 |
-| 8 Staff Appreciation Day | 0 | 1 (spin 3 on one seed) | 3 / 3 / 2 |
-
-Overtime (one seed each): idle ends at 66 s, smart bot lasts 7.2 min.
-
-Bots are proxies. "On target" means the difficulty shape is right, not that it is fun.
-
-## Known problems and open questions
-
-- **Nobody has played it in real time or heard it.** Everything visual was judged from
-  software-rendered stills at ~1 fps; audio was judged by meters. Control feel, camera motion,
-  animation timing, the muzak and whether the gore sounds comic or grim are all unjudged.
-- **Real GPU performance is unmeasured.** Sim step is ~2.7 ms mean on the worst shift and ~4 ms in
-  late Overtime at ~440 bodies (at budget, measured under heavy machine load). Draw calls are
-  110–156 per frame against a 250 budget. Donor outlines roughly double donor triangles.
-- **Camera:** when spinning up from rest it zooms out fast for ~0.25 s to avoid cropping the drum.
-  `settings.cameraZoomRange` (~0.9) softens it. Needs a human eye.
-- **Balance outliers:** shift 4 smart bot fails one seed (likely the bot); shift 6 is high-variance
-  from tank chains; shift 7 slam-spam and shift 8 spin each get lucky on one seed.
-- **The pool twist** reaches its game-changing depth by half-time on six of eight shifts; shifts 1
-  and 5 stay shallow.
-- **Windows build has never been executed.** Checked statically only (PE headers, icon, asar,
-  Steam binaries). Needs a real Windows 10/11 run; the exe is not code-signed.
-- **Steam:** no app id configured (`desktop/steam_appid.txt`), no real Steam session tested, no
-  store assets made yet (capsules, screenshots, description, trailer). The Steam module needs the
-  VC++ 2015–2022 x64 redistributable ticked in Steamworks.
-- **Not visually confirmed:** oxygen tank explosion debris, the grinder's amber jam lamp,
-  4K layout, browser fullscreen.
-- **Title is a working title.** "Every Drop Counts" has not been checked against existing Steam titles. The fictional brand was
-  renamed to the provisional SUNNYVEIN (the previous name is a live US trademark); the final name is
-  not confirmed. It lives in one line in `src/core/brand.js`.
-- **Repo location:** this lives in a subfolder of a GitHub profile repo. It should move to its own
-  repository before release.
-
-## Suggested next steps
-
-1. Play it for 15 minutes on a real GPU with sound. Note what feels off (control response, camera,
-   readability at speed, audio mix, first-shift clarity). This is the highest-value thing left.
-2. Read `docs/qa/PLAYTEST-1.md` once it lands and fix its blockers and majors.
-3. Profile a full shift 7 and a late Overtime run on real hardware (frame time, the auto-quality
-   governor's thresholds in `src/render/quality.js`).
-4. Confirm the integration items above landed; then `npm run build:release && npm run smoke &&
-   npm run verify` in `desktop/`, and run the Windows build on Windows.
-5. Steam store assets and text, achievements set up in Steamworks (API names in
-   `docs/STEAM_RELEASE.md` §5.1), app id, depots, upload via the VDF templates.
-6. Second independent playtest after fixes; repeat until it finds no blockers.
+- Final brand name (replace SUNNYVEIN or clear it) and whether to keep the title "Every Drop
+  Counts" (no Steam conflict; weak for search — `docs/local/title-check.md`).
+- Steam: app id, store assets and text (paused at the owner's request), achievements in
+  Steamworks (`docs/STEAM_RELEASE.md` §5.1), code signing, VC++ redistributable tick.
+- Move the game out of this profile repo into its own repository; squash on the way (branch
+  history carries ~99 MB of raw playtest frames).
 
 ## Conventions
 
-- Commit at working states; `node_modules`, `dist`, `desktop/release`, `tools/out` are ignored.
-- Screenshots that document progress go in `docs/progress/`; QA evidence in `docs/qa/`.
-- Do not fetch assets from the internet and do not add telemetry.
+- `node_modules`, `dist`, `desktop/release`, `tools/out`, `tools/local/out`, `docs/qa/raw` are
+  ignored. Progress stills go in `docs/progress/`, QA evidence in `docs/qa/`.
+- No assets fetched from the internet, no telemetry, no network at runtime.
