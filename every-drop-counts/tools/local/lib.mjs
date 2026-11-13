@@ -19,7 +19,9 @@ export const BASE = process.env.EDC_BASE || 'http://localhost:5173/';
 
 export async function launch({ uncapped = true, width = 1920, height = 1080, extraArgs = [], recordAudio = false } = {}) {
   const args = ['--ignore-gpu-blocklist', '--enable-precise-memory-info', '--autoplay-policy=no-user-gesture-required',
-    `--window-size=${width + 16},${height + 140}`, '--window-position=0,0', ...extraArgs];
+    `--window-size=${width + 16},${height + 140}`, '--window-position=0,0', ...extraArgs,
+    // EDC_CHROME_ARGS: extra switches, e.g. --use-adapter-luid=0,76383 (pin Chrome to the iGPU on this machine)
+    ...(process.env.EDC_CHROME_ARGS ? process.env.EDC_CHROME_ARGS.split(' ') : [])];
   // vsync off + no frame-rate cap: frame time then shows the real cost instead of the monitor's refresh
   if (uncapped) args.push('--disable-gpu-vsync', '--disable-frame-rate-limit');
   const browser = await chromium.launch({ channel: 'chrome', headless: false, args });

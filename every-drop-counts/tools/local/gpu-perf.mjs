@@ -51,7 +51,7 @@ try {
   }
 } finally {
   mkdirSync(resolve(HERE, 'out'), { recursive: true });
-  const file = resolve(HERE, 'out', `perf-${vsync ? 'vsync' : 'uncapped'}-${Date.now()}.json`);
+  const file = resolve(HERE, 'out', `perf-${process.env.EDC_TAG || ''}${vsync ? 'vsync' : 'uncapped'}-${Date.now()}.json`);
   writeFileSync(file, JSON.stringify({ rows, console: consoleMsgs }, null, 1));
   console.log('console errors/warnings:', consoleMsgs.length, consoleMsgs.slice(0, 10));
   console.log('wrote', file);
