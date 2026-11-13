@@ -173,6 +173,8 @@ export function createEnvironment(ctx) {
       if (!h) { hatchGroup.visible = false; return; }
       hatchGroup.visible = true;
       const w = h.wall; const at = h.at;
+      if (w === 'back') { hatchGroup.position.set(h.x, h.y, -HD + 0.07); hatchGroup.rotation.set(Math.PI / 2, 0, 0); hatchGroup.scale.set(1, 1, 0.42); return; }
+      hatchGroup.scale.set(1, 1, 1);
       // place on the wall surface, door normal pointing inward
       if (w === 'floor') { hatchGroup.position.set(at, -HH + 0.06, 0); hatchGroup.rotation.set(0, 0, 0); }
       if (w === 'ceiling') { hatchGroup.position.set(at, HH - 0.06, 0); hatchGroup.rotation.set(0, 0, Math.PI); }

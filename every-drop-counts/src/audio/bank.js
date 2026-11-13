@@ -17,6 +17,28 @@ function hashStr(s) {
   return h >>> 0;
 }
 
+const MOM_TARGET = 0.2; // momentary (100 ms RMS) level every one-shot variant is rendered to (-14 dBFS)
+const PEAK_CAP = 0.97;
+
+/** Normalise so the loudest 100 ms window hits MOM_TARGET (consistent variants), capped by peak. */
+function loudnessNormalize(d, sr) {
+  const w = Math.max(1, Math.floor(sr * 0.1));
+  let s = 0, best = 0, peak = 0;
+  for (let i = 0; i < d.length; i++) {
+    const x = d[i];
+    s += x * x;
+    if (i >= w) s -= d[i - w] * d[i - w];
+    const a = x < 0 ? -x : x;
+    if (a > peak) peak = a;
+    if (s > best) best = s;
+  }
+  const mom = Math.sqrt(Math.max(best, 0) / Math.min(w, d.length));
+  if (mom < 1e-9 || peak < 1e-9) return d;
+  const g = Math.min(MOM_TARGET / mom, PEAK_CAP / peak);
+  for (let i = 0; i < d.length; i++) d[i] *= g;
+  return d;
+}
+
 export class Bank {
   constructor(ctx, rnd, seed = 1) {
     this.ctx = ctx;
@@ -59,7 +81,8 @@ export class Bank {
     let data = def.render(this.sr, rnd, v);
     // Never let a NaN/Inf into the graph: it would poison downstream filters permanently.
     for (let i = 0; i < data.length; i++) if (!Number.isFinite(data[i])) data[i] = 0;
-    if (def.peak !== null) normalize(data, def.peak ?? 0.9);
+    if (/^(mi_|md_|lp)/.test(name) || def.norm === 'peak') normalize(data, def.peak ?? 0.9);
+    else loudnessNormalize(data, this.sr);
     const b = this.ctx.createBuffer(1, data.length, this.sr);
     if (b.copyToChannel) b.copyToChannel(data, 0); else b.getChannelData(0).set(data);
     this.cache.set(name + '#' + v, b);

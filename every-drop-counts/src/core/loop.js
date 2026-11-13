@@ -9,7 +9,8 @@
  *   loop.setPaused(true);
  *   loop.stepNow(n);                // advance n fixed steps synchronously (debug harness)
  *
- * Sim time advances in fixed dt; render gets alpha in [0,1) to interpolate prev->current state.
+ * Sim time advances in fixed dt; render(alpha, realDt, simDt) gets alpha in [0,1] to interpolate
+ * prev->current state, the real frame time, and the scaled (sim-coupled) time for visual effects.
  * Effective scale = paused ? 0 : (hitStop ? 0 : baseScale * slowMoScale).
  * No DOM except requestAnimationFrame / performance.now (core is browser-side).
  */
@@ -79,7 +80,7 @@ export function createLoop({ dt = 1 / 60, maxStepsPerFrame = 5, step, render, on
       n++;
     }
     if (n >= maxStepsPerFrame) acc = Math.min(acc, dt);
-    render(acc / dt, real);
+    render(acc / dt, real, real * effectiveScale());
   }
 
   return {
@@ -100,10 +101,10 @@ export function createLoop({ dt = 1 / 60, maxStepsPerFrame = 5, step, render, on
     slowMo(scale, seconds) { slowScale = scale; slowLeft = seconds; },
     hitStop(frames) { hitStopLeft = Math.max(hitStopLeft, frames / 60); },
     resetAccumulator() { acc = 0; },
-    /** Advance n fixed steps synchronously, then render once (debug harness / tests). */
-    stepNow(n = 1) {
+    /** Advance n fixed steps synchronously, then render once unless doRender === false (debug harness). */
+    stepNow(n = 1, doRender = true) {
       for (let i = 0; i < n; i++) doStep();
-      render(0, 0);
+      if (doRender) render(1, 0, n * dt);
     },
   };
 }

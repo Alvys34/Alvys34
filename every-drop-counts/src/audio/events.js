@@ -7,10 +7,13 @@ import { DUCK } from './mix.js';
 class Adapt {
   constructor(init) { this.ref = init; }
   norm(x) {
-    x = Math.max(0, Number(x) || 0);
+    x = Number(x);
+    if (!Number.isFinite(x) || x < 0) x = 0;
+    x = Math.min(x, this.ref * 1000);
     this.ref += (x - this.ref) * 0.01;
-    if (this.ref < 1e-6) this.ref = 1e-6;
-    return x / (x + this.ref);
+    if (!(this.ref > 1e-6)) this.ref = 1e-6;
+    const n = x / (x + this.ref);
+    return Number.isFinite(n) ? n : 0;
   }
 }
 
@@ -48,7 +51,7 @@ export function makeHandlers(eng) {
 
   const H = {
     'shift:start'() {
-      P('stinger', 'jingleStart', { gain: 0.8, force: true });
+      P('stinger', 'jingleStart', { gain: 1, force: true });
       eng.loops && eng.loops.reset();
       eng.music && eng.music.setArrangement('shift', now() + 1.6);
       eng.duckMusic(DUCK.jingle);
@@ -57,12 +60,12 @@ export function makeHandlers(eng) {
     'shift:end'(p) {
       const r = p && p.result;
       const name = r === 'complete' ? 'jingleComplete' : r === 'failed' ? 'jingleFailed' : 'jingleTimeout';
-      P('stinger', name, { gain: 0.85, force: true });
+      P('stinger', name, { gain: 1, force: true });
       eng.music && eng.music.holdUntil(now() + 2.8, 'results');
       eng.duckMusic(1);
     },
-    'wave:incoming'() { P('machine', 'intakeBell', { gain: 0.32 }); },
-    'hatch:open'(p) { P('machine', 'hatch', { gain: 0.75, pan: p.pan }); },
+    'wave:incoming'() { P('machine', 'intakeBell', { gain: 1 }); },
+    'hatch:open'(p) { P('machine', 'hatch', { gain: 1, pan: p.pan }); },
 
     'donor:spawn'(p) {
       if (eng.rnd() < 0.7) P('vocal', 'vSpawn', { gain: 0.5, pan: p.pan, rate: voiceRate(p.type, p.id), delay: eng.rnd() * 0.35, pitch: 0.4 });
@@ -87,8 +90,8 @@ export function makeHandlers(eng) {
       eng.duckMusic(deathWindowN >= 3 ? DUCK.massDeath : DUCK.death);
       switch (p.cause) {
         case 'drown':
-          P('vocal', 'vDrown', { gain: 0.6, pan, rate, pitch: 0.3 });
-          P('splash', 'splash', { gain: 0.25, pan, rate: 1.3 });
+          P('vocal', 'vDrown', { gain: 1, pan, rate, pitch: 0.3 });
+          P('splash', 'splash', { gain: 0.3, pan, rate: 1.3 });
           break;
         case 'bleedout':
           P('vocal', 'vSigh', { gain: 0.45, pan, rate, pitch: 0.3 });
@@ -138,7 +141,7 @@ export function makeHandlers(eng) {
       const e = Math.max(0, num(p.speed)) * Math.max(0.05, num(p.mass, 1));
       const n = A.energy.norm(e);
       if (n < 0.2) return; // soft contacts stay silent
-      const g = 0.2 + 0.8 * Math.min(1, (n - 0.2) / 0.7);
+      const g = Math.pow(Math.min(1, (n - 0.2) / 0.7), 2); // steep: tumbling taps quiet, real hits loud
       switch (p.kind) {
         case 'metal': P('metal', 'clang', { gain: g, pan: p.pan, rate: 1.1 - 0.25 * n }); break;
         case 'glass': P('glass', 'tink', { gain: g, pan: p.pan }); break;
@@ -158,11 +161,11 @@ export function makeHandlers(eng) {
       const n = A.size.norm(p.size);
       eng.patter += 0.3 + n;
       if (n > 0.75) P('splat', 'splatBig', { gain: 0.4 + 0.5 * n, pan: p.pan });
-      else P('splat', 'splat', { gain: 0.35 + 0.65 * n, pan: p.pan, rate: 1.15 - 0.3 * n });
+      else P('splat', 'splat', { gain: 0.15 + 0.85 * Math.pow(n, 1.5), pan: p.pan, rate: 1.15 - 0.3 * n });
     },
     splash(p) {
       const n = A.splash.norm(p.size);
-      P('splash', 'splash', { gain: 0.35 + 0.65 * n, pan: p.pan, rate: 1.2 - 0.4 * n });
+      P('splash', 'splash', { gain: 0.25 + 0.75 * n, pan: p.pan, rate: 1.2 - 0.4 * n });
     },
     'hazard:contact'(p) {
       const n = A.intensity.norm(p.intensity);
@@ -185,8 +188,8 @@ export function makeHandlers(eng) {
       }
     },
     'hazard:telegraph'(p) {
-      if (p.hazard === 'crusher' || !p.hazard) P('machine', 'crusherTelegraph', { gain: 0.6, pan: p.pan });
-      else P('machine', 'warnBeep', { gain: 0.4, pan: p.pan });
+      if (p.hazard === 'crusher' || !p.hazard) P('machine', 'crusherTelegraph', { gain: 1, pan: p.pan });
+      else P('machine', 'warnBeep', { gain: 1, pan: p.pan });
     },
     'grinder:clog'(p) {
       if (eng.loops) { eng.loops.clogged = true; eng.loops.grinderSeen = true; }
@@ -200,15 +203,15 @@ export function makeHandlers(eng) {
       P('machine', 'slam', { gain: 1, force: true });
       eng.duckMusic(DUCK.slam);
     },
-    'slam:ready'() { P('machine', 'slamReady', { gain: 0.35 }); },
+    'slam:ready'() { P('machine', 'slamReady', { gain: 1 }); },
     combo(p) {
       const m = Math.max(1, Math.min(8, Math.round(num(p.multiplier, 2))));
       const deg = [0, 0, 2, 4, 7, 9, 12, 14, 16][m];
       P('stinger', 'comboHit', { gain: 0.4 + 0.04 * m, rate: semis(deg), force: true });
       P('stinger', 'comboRiser', { gain: 0.25 + 0.04 * m, rate: semis(deg * 0.5) * (0.85 + 0.03 * m), force: true });
     },
-    bonus() { P('stinger', 'register', { gain: 0.7, force: true }); },
-    fine() { P('stinger', 'buzzer', { gain: 0.6, force: true }); },
+    bonus() { P('stinger', 'register', { gain: 1, force: true }); },
+    fine() { P('stinger', 'buzzer', { gain: 1, force: true }); },
     'prop:puncture'(p) {
       P('rocket', 'puncture', { gain: 0.8, pan: p.pan, force: true });
       const v = P('rocket', 'rocket', { gain: 0.7, pan: p.pan, delay: 0.12, force: true });
@@ -236,30 +239,30 @@ export function makeHandlers(eng) {
     'pa:announce'(p) {
       const mood = p.mood === 'urgent' ? 'urgent' : p.mood === 'glitch' ? 'glitch' : 'calm';
       const chime = mood === 'urgent' ? 'paUrgent' : mood === 'glitch' ? 'paGlitch' : 'paCalm';
-      P('pa', chime, { gain: 0.8, force: true });
+      P('pa', chime, { gain: 1, force: true });
       const len = Math.max(0.8, Math.min(2.5, 0.5 + String(p.text || '').length * 0.045));
       const delay = mood === 'urgent' ? 0.75 : mood === 'glitch' ? 1.25 : 1.3;
-      P('pa', mood === 'glitch' ? 'paSpeechGlitch' : 'paSpeech', { gain: 0.55, delay, stop: len, force: true, rate: mood === 'urgent' ? 1.08 : 1 });
+      P('pa', mood === 'glitch' ? 'paSpeechGlitch' : 'paSpeech', { gain: 1, delay, stop: len, force: true, rate: mood === 'urgent' ? 1.08 : 1 });
       eng.duckMusic(DUCK.pa);
     },
     'timer:warning'(p) {
       const s = num(p.secondsLeft, 10);
-      if (s <= 5) P('stinger', 'tickUrgent', { gain: 0.45 });
-      else P('stinger', 'tick', { gain: 0.5 });
+      if (s <= 5) P('stinger', 'tickUrgent', { gain: 1 });
+      else P('stinger', 'tick', { gain: 1 });
     },
     'game:pause'(p) {
       eng.pausedHint = !!(p && p.paused);
       P('ui', eng.pausedHint ? 'pauseOn' : 'pauseOff', { gain: 1, force: true });
     },
-    'ui:hover'() { P('ui', 'uiHover', { gain: 0.6 }); },
+    'ui:hover'() { P('ui', 'uiHover', { gain: 1 }); },
     'ui:click'() { P('ui', 'uiClick', { gain: 1, force: true }); },
     'ui:back'() { P('ui', 'uiBack', { gain: 1, force: true }); },
     'ui:star'(p) {
       const n = Math.max(1, Math.min(3, Math.round(num(p.n, 1))));
-      P('stinger', 'star', { gain: 0.75, rate: [1, semis(4), semis(7)][n - 1], force: true });
-      if (n === 3) P('stinger', 'star3', { gain: 0.6, delay: 0.05, force: true });
+      P('stinger', 'star', { gain: 1, rate: [1, semis(4), semis(7)][n - 1], force: true });
+      if (n === 3) P('stinger', 'star3', { gain: 0.8, delay: 0.05, force: true });
     },
-    achievement() { P('stinger', 'achievement', { gain: 0.7, force: true }); },
+    achievement() { P('stinger', 'achievement', { gain: 1, force: true }); },
   };
   return H;
 }

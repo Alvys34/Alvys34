@@ -2,12 +2,14 @@
  * Fixed front camera with mild perspective, subtle sway and event-driven shake / zoom-punch.
  * (VFX owns this file.)  createCameraRig(ctx) -> { update(dt, state, alpha), resize(w,h), shake(amount), dispose() }
  *
- * Framing: the rotating 16x10 drum (diagonal ~18.9 m) must always fit, so the camera distance is
- * solved from the vertical FOV and the aspect ratio.
+ * Framing: the rotating 16x10 drum (diagonal ~18.9 m). We frame ~17.5 m so donors read at a
+ * decent size. The view is centred slightly BELOW the drum axis (CENTER_Y): bodies and the pool
+ * collect at the lowest corner, which must stay on screen; the top corners may clip (under the HUD).
  */
 export function createCameraRig(ctx) {
   const { camera, bus, settings } = ctx;
-  const DIAG = Math.hypot(16, 10) + 1.6; // margin around the drum
+  const FRAME = 17.5; // metres that must fit vertically (and horizontally)
+  const CENTER_Y = -0.9;
   let baseDist = 30;
   let trauma = 0;
   let punch = 0;
@@ -17,9 +19,9 @@ export function createCameraRig(ctx) {
   function fit() {
     const vfov = (camera.fov * Math.PI) / 180;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    const dV = (DIAG / 2) / Math.tan(vfov / 2);
-    const dH = (DIAG / 2) / Math.tan(hfov / 2);
-    baseDist = Math.max(dV, dH) * 0.93 + 2.5; // corners may kiss the frame edge at 45°
+    const dV = (FRAME / 2) / Math.tan(vfov / 2);
+    const dH = (FRAME / 2) / Math.tan(hfov / 2);
+    baseDist = Math.max(dV, dH) + 2.5; // + front-face depth of the drum
   }
 
   const add = (a) => { if (settings.screenShake !== false) trauma = Math.min(1, trauma + a); };
@@ -43,10 +45,10 @@ export function createCameraRig(ctx) {
       const sway = 0.12;
       camera.position.set(
         Math.sin(t * 0.21) * sway + n(1) * s * 0.6,
-        0.6 + Math.sin(t * 0.17) * sway * 0.6 + n(2) * s * 0.6,
+        CENTER_Y + 0.5 + Math.sin(t * 0.17) * sway * 0.6 + n(2) * s * 0.6,
         baseDist * (1 - punch * 0.06),
       );
-      camera.lookAt(n(3) * s * 0.15, n(4) * s * 0.15, 0);
+      camera.lookAt(n(3) * s * 0.15, CENTER_Y + n(4) * s * 0.15, 0);
       camera.rotation.z += n(5) * s * 0.02;
     },
     dispose() { offs.forEach((o) => o()); },

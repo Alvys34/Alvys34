@@ -209,7 +209,7 @@ export function createSim({ RAPIER, bus, seed = 1, tunables = null } = {}) {
       levelId: c.levelId, mode: m.mode, status: m.status, result: m.result,
       time: round3(c.time), step: c.stepIndex,
       clock: { t: round3(m.clock.t), left: Number.isFinite(m.clock.left) ? round3(m.clock.left) : null, duration: Number.isFinite(m.clock.duration) ? m.clock.duration : null },
-      liters: round3(c.scoring.liters), collected: round3(c.blood.collected), bonus: round3(c.scoring.bonus), fines: round3(c.scoring.fines),
+      liters: round3(m.result ? m.result.liters : c.scoring.liters), collected: round3(c.blood.collected), bonus: round3(c.scoring.bonus), fines: round3(c.scoring.fines),
       donorBloodTotal: round3(c.blood.donorTotal),
       fill: round3(c.pool.fill), poolLevel: round3(c.pool.level), poolVolume: round3(c.pool.volume),
       quota: m.quota, stars: m.result ? m.result.stars : null,

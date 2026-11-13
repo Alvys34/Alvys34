@@ -21,7 +21,8 @@ function classicScriptForFileProtocol() {
 export default defineConfig({
   base: './',
   plugins: [classicScriptForFileProtocol()],
-  server: { port: 5173, strictPort: true },
+  // EDC_NO_HMR=1 (set by tools/shot.mjs --serve): no live reloads while other agents edit files
+  server: { port: 5173, strictPort: true, hmr: process.env.EDC_NO_HMR ? false : undefined },
   preview: { port: 5173, strictPort: true },
   build: {
     target: 'es2022',

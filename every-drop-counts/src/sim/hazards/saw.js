@@ -6,7 +6,7 @@
  *   at: tangent coordinate along the wall; offset: centre distance from the wall surface (m)
  *   dir: +1 spins counter-clockwise (in drum-local view), -1 clockwise
  */
-import { wallFrame, wallPoint } from '../physics.js';
+import { wallFrame, wallPoint, addVelocity } from '../physics.js';
 import { damagePart } from '../donor.js';
 
 export default {
@@ -55,10 +55,10 @@ export default {
           const want = H.fling;
           if (vt < want) {
             const add = Math.min(want - vt, want * 0.35);
-            part.vx += tx * add; part.vy += ty * add;
+            addVelocity(part, tx * add, ty * add);
           }
           const vo = part.vx * ox + part.vy * oy;
-          if (vo < 1.5) { part.vx += ox * 0.6; part.vy += oy * 0.6; }
+          if (vo < 1.5) addVelocity(part, ox * 0.6, oy * 0.6);
           if (contactCooldown <= 0) {
             contactCooldown = 0.08;
             c2.emit('hazard:contact', { hazard: 'saw', intensity: Math.min(1, 0.4 + touching * 0.2) }, [part.x, part.y, part.z]);

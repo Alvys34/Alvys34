@@ -164,11 +164,22 @@ export const RAW = [
   ['stinger', 'jingleStart'], ['stinger', 'jingleComplete'], ['stinger', 'jingleTimeout'], ['stinger', 'jingleFailed'],
 ];
 
-export async function measureRaw() {
+/** Each raw sound, variants 0..nVar-1 rendered separately (dry, no pitch randomisation), averaged. */
+export async function measureRaw(nVar = 3) {
   const out = [];
   for (const [cls, name, o] of RAW) {
-    const r = await renderScenario({ dur: 3.2, dry: true, plays: [[0, cls, name, { v: 0, pitch: 0, ...o }]] });
-    out.push({ id: name + (o && o.v ? '#' + o.v : ''), cls, ...strip(r) });
+    const rs = [];
+    const v0 = (o && o.v) || 0;
+    // start at 0.5 s: WebAudio compressors start from a gain-reduced state and need ~0.3 s to settle
+    for (let k = 0; k < nVar; k++) rs.push(strip(await renderScenario({ dur: 3.7, from: 0.45, dry: true, plays: [[0.5, cls, name, { pitch: 0, ...o, v: v0 + k }]] })));
+    const avg = (key) => +(rs.reduce((a, r) => a + r[key], 0) / rs.length).toFixed(key === 'flatness' ? 3 : 1);
+    const r = { ...rs[0] };
+    for (const key of ['peakDb', 'momDb', 'rmsDb', 'durMs', 'centroidHz', 'lowPct', 'midPct', 'highPct', 'flatness']) r[key] = avg(key);
+    r.momSpread = +(Math.max(...rs.map((x) => x.momDb)) - Math.min(...rs.map((x) => x.momDb))).toFixed(1);
+    r.clip = rs.some((x) => x.clip);
+    r.errors = rs.reduce((a, x) => a + x.errors, 0);
+    r.errorLog = rs.flatMap((x) => x.errorLog);
+    out.push({ id: name + (o && o.v ? '#' + o.v : ''), name, cls, ...r });
   }
   return out;
 }
@@ -220,12 +231,8 @@ export async function measureEvents() {
   const out = [];
   for (const [label, payload, type, primers] of EVENT_CASES) {
     // primers: events emitted many times beforehand so the adaptive normalisers settle (offline at t=0, then measured event at t=0.6)
-    const events = [];
-    if (primers) for (const [pt, pp, n] of primers) for (let i = 0; i < n; i++) events.push([0, pt, pp]);
-    const scenario = { dur: 4, events: [...events, [0.6, type || label, payload]], from: 0.55 };
-    if (primers) scenario.prime = true;
-    // primers would make sound at t=0; analyse only after 0.55 s (primer tails are short)
-    const r = await renderScenario({ ...scenario, from: 0.58 });
+    void primers;
+    const r = await renderScenario({ dur: 4, events: [[0.6, type || label, payload]], from: 0.55 });
     out.push({ id: label, ...strip(r) });
   }
   return out;
@@ -261,13 +268,14 @@ export async function measureLoops() {
 /** Motor onset latency: omega steps from 0 to 0.5 at t=1 s; time until output reaches 50% of steady RMS. */
 export async function motorLatency() {
   const r = await renderScenario({ dur: 2.2, state: { screen: 'playing' }, stateAt: (t) => ({ drumOmega: t >= 1 ? 0.5 : 0 }) }, true);
+  // time from the state change until the output first exceeds 25 % of the steady-state peak
   const d = r.buffer.getChannelData(0);
-  const w = Math.floor(SR * 0.002);
-  const rmsAt = (t) => { const i = Math.floor(t * SR); let s = 0; for (let k = 0; k < w; k++) s += d[i + k] * d[i + k]; return Math.sqrt(s / w); };
-  let steady = 0; for (let t = 1.8; t < 2.1; t += 0.002) steady = Math.max(steady, rmsAt(t));
+  let steady = 0; for (let i = Math.floor(1.7 * SR); i < Math.floor(2.1 * SR); i++) steady = Math.max(steady, Math.abs(d[i]));
+  let base = 0; for (let i = Math.floor(0.5 * SR); i < Math.floor(0.99 * SR); i++) base = Math.max(base, Math.abs(d[i]));
   let lat = null;
-  for (let t = 1.0; t < 1.5; t += 0.001) if (rmsAt(t) > steady * 0.5) { lat = Math.round((t - 1.0) * 1000); break; }
-  return { latencyMs: lat, steadyDb: +db(steady).toFixed(1), note: 'state applied on the frame boundary at t=1.0 s (frames of 11.6 ms); add up to one game frame in the real loop' };
+  const t0 = Math.floor(1.0 * SR);
+  for (let i = t0; i < Math.floor(1.5 * SR); i++) if (Math.abs(d[i]) > steady * 0.25) { lat = +(((i - t0) / SR) * 1000).toFixed(1); break; }
+  return { latencyMs: lat, steadyPeakDb: +db(steady).toFixed(1), beforeDb: +db(base).toFixed(1), note: 'measured from the frame in which state.drumOmega changed (includes the motor-start relay transient)' };
 }
 
 export async function measureMusic() {
@@ -284,8 +292,9 @@ export async function measureMusic() {
   const out = [];
   for (const [id, state] of cases) {
     // let the degrade smoother converge: run 14 s, analyse the last 9 s
-    const r = await renderScenario({ dur: 14, from: 5, music: true, state });
-    out.push({ id, ...strip(r) });
+    const r = await renderScenario({ dur: 14, from: 5, music: true, state }, true);
+    const t = tonal(r.buffer, 5);
+    out.push({ id, ...strip(r), ...t });
   }
   return out;
 }
@@ -296,6 +305,37 @@ export async function measureDuck() {
   const d = r.buffer.getChannelData(0);
   const seg = (a, b) => { let s = 0, n = 0; for (let i = Math.floor(a * SR); i < Math.floor(b * SR); i++) { s += d[i] * d[i]; n++; } return db(Math.sqrt(s / n)); };
   return { musicBeforeDb: +seg(1.5, 2.9).toFixed(1), slamWindowDb: +seg(3.0, 3.3).toFixed(1), musicAfter2sDb: +seg(4.6, 5.9).toFixed(1) };
+}
+
+/** Tuning purity & key clarity over 220-2500 Hz using a 16k FFT (for the music degradation check). */
+export function tonal(ab, from = 0) {
+  const d0 = ab.getChannelData(0), d1 = ab.numberOfChannels > 1 ? ab.getChannelData(1) : d0, sr = ab.sampleRate;
+  const N = 16384;
+  const spec = new Float64Array(N / 2), re = new Float64Array(N), im = new Float64Array(N);
+  for (let i = Math.floor(from * sr); i + N <= d0.length; i += N / 2) {
+    for (let k = 0; k < N; k++) { const hw = 0.5 - 0.5 * Math.cos((2 * Math.PI * k) / (N - 1)); re[k] = 0.5 * (d0[i + k] + d1[i + k]) * hw; im[k] = 0; }
+    fft(re, im);
+    for (let k = 0; k < N / 2; k++) spec[k] += re[k] * re[k] + im[k] * im[k];
+  }
+  const SCALE = new Set([5, 7, 9, 10, 0, 2, 4]); // F major
+  let inTune = 0, inKey = 0, tot = 0;
+  // only count spectral peaks (local maxima) so noise floor doesn't dilute the measure
+  for (let k = 2; k < N / 2 - 2; k++) {
+    const f = (k * sr) / N;
+    if (f < 220 || f > 2500) continue;
+    const p = spec[k];
+    if (!(p > spec[k - 1] && p >= spec[k + 1] && p > spec[k - 2] && p >= spec[k + 2])) continue;
+    // parabolic interpolation for the true peak frequency
+    const a = Math.log(spec[k - 1] + 1e-30), b = Math.log(p + 1e-30), c = Math.log(spec[k + 1] + 1e-30);
+    const off = (0.5 * (a - c)) / (a - 2 * b + c || 1e-9);
+    const fp = ((k + off) * sr) / N;
+    const midi = 69 + 12 * Math.log2(fp / 440);
+    const cents = Math.abs(midi - Math.round(midi)) * 100;
+    tot += p;
+    if (cents < 20) inTune += p;
+    if (SCALE.has(((Math.round(midi) % 12) + 12) % 12)) inKey += p;
+  }
+  return { inTune: +(inTune / (tot || 1)).toFixed(2), inKey: +(inKey / (tot || 1)).toFixed(2) };
 }
 
 function strip(r) { const { buffer, peak, ...rest } = r; return { ...rest, clip: peak >= 0.985 }; }

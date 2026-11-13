@@ -17,7 +17,7 @@ export function createPoolView(ctx) {
   const pos = new Float32Array(MAX_TRIS * 9);
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x9a0010, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.86,
+    color: 0x8a0010, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.72,
     emissive: 0x2a0004, side: THREE.DoubleSide, depthWrite: false,
   });
   const mesh = new THREE.Mesh(geo, mat);

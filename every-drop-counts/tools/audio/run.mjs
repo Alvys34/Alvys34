@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './server.mjs';
+import { TARGETS } from './targets.mjs';
+import { TRIM_DB } from '../../src/audio/mix.js';
 
 const require = createRequire(import.meta.url);
 let playwright;
@@ -51,9 +53,17 @@ try {
 
   if (only.includes('raw')) {
     console.log('== RAW SOUNDS (through class bus + master chain; variant 0; dBFS) ==');
-    const raw = await page.evaluate(() => window.__audioHarness.measureRaw());
+    const raw = await page.evaluate((n) => window.__audioHarness.measureRaw(n), Number(args.variants || 3));
     report.raw = raw;
-    table(raw, COLS);
+    for (const r of raw) { const t = TARGETS[r.id]; r.target = t ?? ''; r.delta = t != null ? +(r.momDb - t).toFixed(1) : ''; }
+    table(raw, [...COLS, 'momSpread', 'target', 'delta']);
+    if (args.autotrim) {
+      const next = { ...TRIM_DB };
+      for (const r of raw) if (TARGETS[r.id] != null) next[r.id] = Math.round(((TRIM_DB[r.id] || 0) - r.delta) * 2) / 2;
+      for (const k of Object.keys(next)) if (next[k] === 0) delete next[k];
+      console.log('Suggested TRIM_DB:\n' + JSON.stringify(next).replace(/"(\w+)":/g, '$1: ').replace(/,/g, ', ') + '\n');
+    }
+    for (const r of raw) if (r.delta !== '' && !r.id.includes('#')) check(Math.abs(r.delta) <= 3, `raw ${r.id} is ${r.delta} dB off its mix target`);
     for (const r of raw) {
       check(!r.clip, `raw ${r.id} clips (peak ${r.peakDb} dBFS)`);
       check(r.momDb > -45, `raw ${r.id} nearly silent (${r.momDb} dB)`);
@@ -93,22 +103,28 @@ try {
     table(lp, COLS.filter((c) => c !== 'cls'));
     const by = Object.fromEntries(lp.map((r) => [r.id, r]));
     check(by['motor ω=2.2'].momDb > by['motor ω=0.4'].momDb + 2, 'motor should get louder with |ω|');
-    check(by['saw load=1'].centroidHz < by['saw idle'].centroidHz * 1.6, 'saw load sanity');
+    check(by['saw load=1'].momDb > by['saw idle'].momDb + 3, 'saw should grind louder under load');
+    check(by['saw idle'].momDb > -34, 'idle saw whine should be audible');
     check(by['grinder load=1'].momDb > by['grinder idle'].momDb, 'grinder louder under load');
     for (const r of lp) check(!r.clip, `loop ${r.id} clips`);
     const lat = await page.evaluate(() => window.__audioHarness.motorLatency());
     report.motorLatency = lat;
     console.log('motor onset latency:', lat, '\n');
-    check(lat.latencyMs != null && lat.latencyMs <= 30, `motor should respond within ~30 ms (got ${lat.latencyMs})`);
+    check(lat.latencyMs != null && lat.latencyMs <= 20, `motor should respond within 20 ms of the state change (got ${lat.latencyMs})`);
   }
 
   if (only.includes('music')) {
     console.log('== MUSIC (last 9 s of a 14 s render) ==');
     const mu = await page.evaluate(() => window.__audioHarness.measureMusic());
     report.music = mu;
-    table(mu, COLS.filter((c) => c !== 'cls'));
+    table(mu, [...COLS.filter((c) => c !== 'cls'), 'inTune', 'inKey']);
     const by = Object.fromEntries(mu.map((r) => [r.id, r]));
-    check(by['shift fill=1'].centroidHz < by['shift fill=0 int=0'].centroidHz, 'music should darken with fill');
+    const clean = by['shift fill=0 int=0'], wrecked = by['shift fill=1'], half = by['shift fill=0.5'];
+    check(wrecked.inTune < clean.inTune - 0.15, `music should go out of tune with fill (in-tune ${clean.inTune} -> ${wrecked.inTune})`);
+    check(half.inTune <= clean.inTune, 'music at fill 0.5 should be less in tune than at 0');
+    check(wrecked.inKey < clean.inKey, `music should get sour (in-key ${clean.inKey} -> ${wrecked.inKey})`);
+    check(wrecked.lowPct < clean.lowPct - 20, 'music at fill 1 should lose its low end (tinny speaker)');
+    check(Math.abs(wrecked.momDb - clean.momDb) < 4, `degraded music should not jump in loudness (${clean.momDb} -> ${wrecked.momDb})`);
     check(by['paused (fill=0)'].momDb < by['shift fill=0 int=0'].momDb - 4, 'paused music should be clearly quieter');
     check(by['shift slow-mo 0.35'].centroidHz < by['shift fill=0 int=0'].centroidHz, 'slow-mo should pitch music down');
     for (const r of mu) check(!r.clip, `music ${r.id} clips`);

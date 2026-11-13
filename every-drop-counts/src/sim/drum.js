@@ -10,6 +10,8 @@
  *   jolt, prevJolt     0..1 render hint (decays after a slam)
  *   input              { rotate, brake } latest input; slamRequest latched by setInput
  */
+import { addVelocity } from './physics.js';
+
 export function createDrumState(T, theta = 0) {
   return {
     theta, prevTheta: theta, omega: 0, alpha: 0,
@@ -85,7 +87,7 @@ export function trySlam(ctx) {
   for (const d of ctx.dyns) {
     if (d.removed) continue;
     const dv = S.deltaV * d.slamScale;
-    d.vx += ux * dv; d.vy += uy * dv;
+    addVelocity(d, ux * dv, uy * dv, 0);
     if (S.angularJolt > 0) {
       d.body.applyTorqueImpulse({
         x: rng.range(-1, 1) * S.angularJolt * d.mass * 0.05,

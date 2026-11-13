@@ -63,12 +63,12 @@ export const GORE = {
     variants: 10,
     render(sr, rnd) {
       const out = buf(sr, 0.16);
-      addClick(out, sr, 0, rr(rnd, 0.3, 0.6));
-      addNoise(out, sr, rnd, 0, 0.012, 0.35, { type: 'hp', f: rr(rnd, 1800, 3500), decay: 0.003 });
+      addClick(out, sr, 0, rr(rnd, 0.15, 0.3));
+      addNoise(out, sr, rnd, 0, 0.012, 0.3, { type: 'hp', f: rr(rnd, 1800, 3500), decay: 0.003 });
       addMode(out, sr, 0, rr(rnd, 160, 260), 0.012, 0.35);
       const nb = 1 + Math.floor(rnd() * 3);
       for (let i = 0; i < nb; i++) {
-        addBubble(out, sr, rr(rnd, 0.001, 0.04), rr(rnd, 650, 1900), rr(rnd, 0.018, 0.05), rr(rnd, 0.4, 0.9), rr(rnd, 0.5, 1.6));
+        addBubble(out, sr, rr(rnd, 0.001, 0.04), rr(rnd, 650, 1900), rr(rnd, 0.025, 0.05), i ? rr(rnd, 0.3, 0.6) : 0.8, rr(rnd, 0.5, 1.6));
       }
       return fade(dcBlock(out, sr, 60), sr, 0.0002, 0.02);
     },
@@ -180,8 +180,8 @@ export const GORE = {
     variants: 8,
     render(sr, rnd) {
       const out = buf(sr, 0.26);
-      addMode(out, sr, 0, rr(rnd, 160, 210), rr(rnd, 0.06, 0.09), 1, { fEnd: rr(rnd, 75, 90), chirp: 0.05 });
-      addMode(out, sr, 0, rr(rnd, 280, 380), 0.035, 0.5, { fEnd: 180, chirp: 0.03 });
+      addMode(out, sr, 0, rr(rnd, 170, 220), rr(rnd, 0.045, 0.06), 1, { fEnd: rr(rnd, 105, 125), chirp: 0.04 });
+      addMode(out, sr, 0, rr(rnd, 320, 420), 0.04, 0.75, { fEnd: 210, chirp: 0.03 });
       addNoise(out, sr, rnd, 0, 0.07, 0.8, { type: 'lp', f: rr(rnd, 1300, 2000), decay: 0.018 });
       addNoise(out, sr, rnd, 0, 0.015, 0.4, { type: 'bp', f: rr(rnd, 1500, 2500), q: 1, decay: 0.004 });
       if (rnd() < 0.7) addBubble(out, sr, rr(rnd, 0.005, 0.03), rr(rnd, 250, 500), 0.03, 0.25, 0.8);

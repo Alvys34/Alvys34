@@ -180,3 +180,16 @@ draw-call / triangle counts instead (`renderer.info`).
   URLs are allowed. Workers must be bundled files or blob URLs.
 - `edcDesktop.setFullscreen(bool)` returns `Promise<boolean>` (the new state).
 - Final builds: `cd desktop && npm ci && npm run build:release && npm run smoke && npm run verify`.
+
+## Implementation notes (CORE, Phase 1) — additive to the contract above
+
+- Positional events also carry `pos: [x,y,z]` (drum-local metres); every sim event carries `t` (sim
+  seconds). Extra events: `donor:speak { id, text, pos }`, `part:dissolve { id, part, pos }`.
+- Donor ragdolls have **11** bodies (the GDD §6 list: head, chest, pelvis, 2× upper arm, 2× forearm,
+  2× thigh, 2× shin), not 10.
+- `__edc.step(n, render = true)`: pass `false` to skip the render (software WebGL is ~0.3 s/frame).
+  `__edc` also exposes `sim`, `bus`, `view`, `loop`, `input`, `ui`, `audio`, `pause(bool)`.
+- `tools/shot.mjs --serve` starts Vite with `EDC_NO_HMR=1` (no live reload while other agents edit).
+- Production build is a single classic IIFE script (`vite.config.js`) so `dist/index.html` runs
+  from `file://`. Interfaces for later agents: `src/sim/README.md`, `src/render/README.md`,
+  `src/ui/README.md`.

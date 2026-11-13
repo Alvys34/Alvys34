@@ -80,11 +80,11 @@ export class Engine {
     setComp(this.limiter, -3, 0, 20, 0.001, 0.08);
     this.limiter.connect(this.trim);
     this.glue = ctx.createDynamicsCompressor();
-    setComp(this.glue, -14, 8, 3, 0.004, 0.2);
+    setComp(this.glue, GLUE.thr, 0, GLUE.ratio, 0.005, 0.25);
     this.glue.connect(this.limiter);
-    // WebAudio compressors add automatic make-up gain (measured in Chromium: glue +4.1 dB,
-    // limiter +1.7 dB). Compensate so the master chain is ~unity below threshold.
-    this.trim.gain.value = Math.pow(10, -(4.1 + 1.7) / 20);
+    // WebAudio compressors add automatic make-up gain (spec formula, verified in Chromium for
+    // hard-knee settings). Compensate so the master chain is unity below threshold.
+    this.trim.gain.value = makeupComp(GLUE.thr, GLUE.ratio) * makeupComp(-3, 20);
     this.mixSum = G(1, this.glue);
 
     // sfx
@@ -195,7 +195,7 @@ export class Engine {
     this.music.duck.gain.setTargetAtTime(1 - 0.6 * this.duck, now, this.duck > 0.05 ? 0.03 : 0.2);
 
     // patter pressure decays (~0.35 s)
-    this.patter *= Math.exp(-dt / 0.35);
+    this.patter = Number.isFinite(this.patter) ? Math.min(1000, this.patter * Math.exp(-dt / 0.35)) : 0;
 
     // when not running (suspended/locked) keep the bookkeeping light
     if (this.live()) {
@@ -264,6 +264,14 @@ export class Engine {
     try { this.masterUser.disconnect(); } catch (e) { /* noop */ }
     if (this.owned && this.ctx && this.ctx.close) this.ctx.close().catch(() => {});
   }
+}
+
+const GLUE = { thr: -12, ratio: 2.5 };
+
+/** Inverse of the WebAudio spec's automatic make-up gain for a hard-knee compressor. */
+function makeupComp(thr, ratio) {
+  const fullRangeDb = thr + (0 - thr) / ratio; // output level for a 0 dBFS input
+  return 1 / Math.pow(1 / Math.pow(10, fullRangeDb / 20), 0.6);
 }
 
 function setComp(c, thr, knee, ratio, att, rel) {

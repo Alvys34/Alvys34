@@ -2,6 +2,7 @@
  * Intake hatch + wave spawner shared by modes.
  *
  * hatch: { wall: 'ceiling'|'floor'|'left'|'right', at: tangent coord, offset?: m inward }
+ *      or { wall: 'back', x, y, offset?: m in front of the back wall }  (donors drop from mid-air)
  * wave:  { at: seconds, count, types?: { standard: 3, bigGiver: 1 } | ['standard', ...],
  *          props?: [{ type, count }] }
  */
@@ -15,7 +16,7 @@ export function createSpawner(ctx, hatch) {
   let timer = 0;
   let wait = 0;
   const sp = {
-    hatch: { wall: hatch.wall || 'ceiling', at: hatch.at || 0, offset: hatch.offset ?? 1.1, open: 0 },
+    hatch: { wall: hatch.wall || 'ceiling', at: hatch.at || 0, x: hatch.x || 0, y: hatch.y || 0, offset: hatch.offset ?? 1.1, open: 0 },
     get pending() { return queue.length; },
     /** Queue a wave: returns number of entities queued. */
     openWave(wave) {
@@ -28,7 +29,9 @@ export function createSpawner(ctx, hatch) {
       return list.length;
     },
     position() {
-      const [x, y] = wallPoint(ctx.drum, sp.hatch.wall, sp.hatch.at, sp.hatch.offset);
+      const h = sp.hatch;
+      if (h.wall === 'back') return [h.x, h.y, -ctx.drum.hd + h.offset];
+      const [x, y] = wallPoint(ctx.drum, h.wall, h.at, h.offset);
       return [x, y, 0];
     },
     step(dt) {
@@ -36,22 +39,26 @@ export function createSpawner(ctx, hatch) {
       sp.hatch.open = 1;
       timer -= dt;
       if (timer > 0) return;
-      const [x, y] = wallPoint(ctx.drum, sp.hatch.wall, sp.hatch.at, sp.hatch.offset);
-      const z = ctx.rng.range(-1.5, 1.5);
+      const back = sp.hatch.wall === 'back';
+      const p0 = sp.position();
+      const x = p0[0]; const y = p0[1];
+      const z = back ? p0[2] + ctx.rng.range(0, 0.6) : ctx.rng.range(-1.5, 1.5);
       // wait if the hatch mouth is crowded (max 1.5 s)
       if (crowded(ctx, x, y, z, 0.7) && wait < 1.5) { wait += dt; return; }
       wait = 0;
       const item = queue.shift();
-      const f = wallFrame(ctx.drum, sp.hatch.wall);
-      const push = 2.5;
+      // back hatch: push toward the camera and sideways in-plane; wall hatch: push along the normal
+      const f = back ? { n: [0, 0], t: [1, 0] } : wallFrame(ctx.drum, sp.hatch.wall);
+      const push = back ? 0 : 2.5;
       if (item.kind === 'donor') {
         if (ctx.dyns.length + 11 <= T.sim.maxBodies) {
           spawnDonor(ctx, item.type, x + ctx.rng.range(-0.3, 0.3) * f.t[0], y + ctx.rng.range(-0.3, 0.3) * f.t[1], z, {
-            vx: f.n[0] * push + f.t[0] * ctx.rng.range(-1, 1), vy: f.n[1] * push + f.t[1] * ctx.rng.range(-1, 1), vz: ctx.rng.range(-0.5, 0.5),
+            vx: f.n[0] * push + f.t[0] * ctx.rng.range(-1, 1), vy: f.n[1] * push + f.t[1] * ctx.rng.range(-1, 1),
+            vz: back ? ctx.rng.range(0.8, 2.0) : ctx.rng.range(-0.5, 0.5),
           });
         }
       } else if (item.kind === 'prop') {
-        const prop = createProp(ctx, { ...item.spec, pos: [x, y, z], vel: [f.n[0] * push, f.n[1] * push, 0] }, ctx.nextPropId++);
+        const prop = createProp(ctx, { ...item.spec, pos: [x, y, z], vel: [f.n[0] * push, f.n[1] * push, back ? 1 : 0] }, ctx.nextPropId++);
         ctx.props.push(prop);
       }
       timer = T.levels.spawnInterval;

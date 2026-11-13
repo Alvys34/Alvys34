@@ -10,9 +10,9 @@ export default {
   subtitle: 'Mind the edges.',
   duration: 130,
   capacity: 140,
-  quota: [20, 42, 62],
+  quota: [45, 85, 125],
   startAngle: 0,
-  hatch: { wall: 'ceiling', at: 4.0, offset: 1.0 },
+  hatch: { wall: 'back', x: 0, y: 1.0, offset: 1.2 },
   hazards: [
     { type: 'saw', wall: 'left', at: -3.0, z: [-2.5, 0.4], radius: 1.15, dir: 1 },
     { type: 'saw', wall: 'right', at: -1.2, z: [-0.4, 2.5], radius: 1.15, dir: -1 },

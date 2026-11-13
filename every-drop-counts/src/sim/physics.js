@@ -92,7 +92,7 @@ export function makeDyn(kind, body, collider, { mass, radius, thick, owner }) {
     vx: 0, vy: 0, vz: 0, pvx: 0, pvy: 0, pvz: 0,
     sub: 0, prevSub: 0, subTime: 0,
     buoyancy: 1, dragScale: 1, slamScale: 1,
-    removed: false, born: 0,
+    removed: false, born: 0, dirty: false,
   };
 }
 
@@ -115,7 +115,7 @@ export function readback(dyns) {
  * Rotating-frame forces + pool buoyancy/drag, applied as velocity changes before the step.
  *  - gravity: set on the world (rotated) by the drum module
  *  - centrifugal  +w^2 r          (in the drum plane)
- *  - Euler        -alpha z x r = (alpha*y, -alpha*x)
+ *  - Euler        -alpha z x r = (alpha*y, -alpha*x)   (+ -alpha*dt on each body's spin about z)
  *  - Coriolis     -2 w z x v   -> exact rotation of (vx,vy) by -2 w dt (energy-preserving)
  *  - buoyancy     density * g * submerged along world-up; drag ∝ submersion
  */
@@ -132,9 +132,13 @@ export function applyFrameForces(ctx, dt) {
   const P = T.pool;
   const vmax = T.sim.maxSpeed;
   const v3 = { x: 0, y: 0, z: 0 };
+  const frameStill = w === 0 && a === 0;
   for (let i = 0; i < dyns.length; i++) {
     const d = dyns[i];
     if (d.removed) continue;
+    // nothing to add: leave the body alone so resting piles can fall asleep (no jitter, cheaper)
+    if (frameStill && d.sub <= 0 && !d.dirty) continue;
+    d.dirty = false;
     let vx = d.vx; let vy = d.vy; let vz = d.vz;
     // Coriolis (rotation of in-plane velocity)
     const rx = vx * cphi - vy * sphi;
@@ -143,15 +147,21 @@ export function applyFrameForces(ctx, dt) {
     // centrifugal + Euler
     vx += (cf * d.x + eu * d.y) * dt;
     vy += (cf * d.y - eu * d.x) * dt;
+    // rotational Euler term: a torque-free body keeps its WORLD spin, so its spin relative to the
+    // drum changes by -alpha*dt. Without this, jointed chains fight the linear Euler force and stretch.
+    const av = d.body.angvel();
+    let wx = av.x; let wy = av.y; let wz = av.z - eu * dt;
     // buoyancy + drag
     if (d.sub > 0) {
       const b = P.density * d.buoyancy * g * d.sub * dt;
       vx += ux * b; vy += uy * b;
       const k = Math.exp(-P.linearDrag * d.dragScale * d.sub * dt);
       vx *= k; vy *= k; vz *= k;
-      const av = d.body.angvel();
       const ka = Math.exp(-P.angularDrag * d.sub * dt);
-      v3.x = av.x * ka; v3.y = av.y * ka; v3.z = av.z * ka;
+      wx *= ka; wy *= ka; wz *= ka;
+    }
+    if (eu !== 0 || d.sub > 0) {
+      v3.x = wx; v3.y = wy; v3.z = wz;
       d.body.setAngvel(v3, true);
     }
     // safety clamp
@@ -161,6 +171,16 @@ export function applyFrameForces(ctx, dt) {
     v3.x = vx; v3.y = vy; v3.z = vz;
     d.body.setLinvel(v3, true);
   }
+}
+
+/**
+ * The ONLY sanctioned way for sim code (hazards, props, modes) to change a dyn's linear velocity:
+ * the change is committed by the next applyFrameForces pass. Never call body.setLinvel/applyImpulse
+ * directly — the force pass would overwrite it with the cached velocity.
+ */
+export function addVelocity(d, dx, dy, dz = 0) {
+  d.vx += dx; d.vy += dy; d.vz += dz;
+  d.dirty = true;
 }
 
 /** Clamp angular velocities (rare safety net, run every few steps). */

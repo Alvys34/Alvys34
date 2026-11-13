@@ -1,0 +1,10 @@
+[
+  { "eval": "window.__edc.setTimeScale(0)" },
+  { "level": 2 },
+  { "step": 260 }, { "shot": "s2-01-start" },
+  { "input": { "rotate": -1 } }, { "step": 40 }, { "input": { "rotate": 0 } }, { "step": 80 }, { "shot": "s2-02-saw" },
+  { "rock": { "steps": 900, "period": 80, "slamEvery": 150 } },
+  { "shot": "s2-03-mid" },
+  { "rock": { "steps": 2400, "period": 80, "slamEvery": 150 } },
+  { "input": { "rotate": 0, "slam": true } }, { "step": 10 }, { "shot": "s2-04-late-slam" }
+]

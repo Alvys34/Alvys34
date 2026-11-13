@@ -21,7 +21,7 @@ export function createHazardViews(ctx) {
   const kit = {
     yellow: new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.45, metalness: 0.15 }),
     stripes: new THREE.MeshStandardMaterial({ map: stripeTexture(THREE), roughness: 0.5 }),
-    steel: new THREE.MeshStandardMaterial({ color: 0xd8dee0, roughness: 0.22, metalness: 0.85 }),
+    steel: new THREE.MeshStandardMaterial({ color: 0xe4eaec, roughness: 0.3, metalness: 0.35 }), // no env map: keep metalness low or it renders black
     dark: new THREE.MeshStandardMaterial({ color: 0x3a4142, roughness: 0.5, metalness: 0.5 }),
     bloody: new THREE.MeshStandardMaterial({ color: 0xb00018, roughness: 0.3 }),
   };

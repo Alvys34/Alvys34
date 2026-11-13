@@ -8,6 +8,7 @@
  * ctx.blood = {
  *   collected,          // L released from donors so far (credited to score + pool)
  *   donorTotal,         // L of blood ever spawned inside donors (conservation bound)
+ *   dissolved,          // L lost with parts removed un-bled (dissolve / debris cap): never scored
  *   rate,               // L/s released over the last step (audio/VFX intensity)
  *   bleeders: [],       // up to MAX_BLEEDERS active sources for VFX: {x,y,z,dx,dy,dz,rate,part}
  * }
@@ -15,7 +16,7 @@
 const MAX_BLEEDERS = 48;
 
 export function createBloodState() {
-  return { collected: 0, donorTotal: 0, rate: 0, bleeders: [], splatTimer: 0, splatAcc: 0, released: 0 };
+  return { collected: 0, donorTotal: 0, dissolved: 0, rate: 0, bleeders: [], splatTimer: 0, splatAcc: 0, released: 0 };
 }
 
 /** Release `liters` from a part (or from nowhere when part is null). Returns amount released. */

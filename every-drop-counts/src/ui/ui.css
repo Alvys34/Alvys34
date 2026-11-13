@@ -46,3 +46,4 @@
 .edc-drop { display: inline-block; width: 0.7em; height: 0.7em; margin-right: 0.25em; background: #c4001a; border-radius: 0 50% 50% 50%; transform: rotate(45deg); vertical-align: -0.05em; }
 .edc-drop.big { width: 0.8em; height: 0.8em; margin: 0 0.25em; }
 .edc-drop.dim { background: #d7e1dc; }
+.edc-report tr.edc-total td { color: #c4001a; font-size: 17px; border-bottom: none; padding-top: 6px; }

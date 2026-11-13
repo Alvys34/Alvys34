@@ -104,11 +104,11 @@ export class Loops {
 
   update(dt, st, pf, playing, patterPressure) {
     const now = this.ctx.currentTime;
-    const set = (param, v, tc = 0.05) => param.setTargetAtTime(v, now, tc);
+    const set = (param, v, tc = 0.05) => { if (Number.isFinite(v)) param.setTargetAtTime(v, now, tc); };
     const on = playing ? 1 : 0;
 
     // motor follows |omega| with an immediate attack
-    const w = Math.abs(Number(st.drumOmega) || 0);
+    const w = Math.min(10, Math.abs(Number(st.drumOmega) || 0));
     const wn = clamp(w / 2.2, 0, 1.3);
     const mT = on * (w > 0.01 ? 0.3 + 0.7 * Math.min(1, wn) : 0) * L.motor;
     set(this.motorGain.gain, mT, mT > this.lastMotor ? 0.01 : 0.12);
@@ -119,7 +119,7 @@ export class Loops {
     set(this.mWhine.frequency, f * 9.5, 0.02);
     set(this.mWhineG.gain, 0.02 + 0.06 * wn, 0.05);
     set(this.motorLP.frequency, (160 + 520 * wn) * pf, 0.03);
-    this.mRumble.playbackRate.setTargetAtTime((0.5 + 0.6 * wn) * pf, now, 0.05);
+    set(this.mRumble.playbackRate, (0.5 + 0.6 * wn) * pf);
     if (playing && w > 0.08 && this.prevW <= 0.08 && this.stillTime > 0.25) {
       this.eng.play('machine', 'motorStart', { gain: 0.45, force: true });
     }
@@ -135,7 +135,7 @@ export class Loops {
     const sf = 230 * (1 - 0.33 * sl) * pf;
     set(this.sOsc.frequency, sf, 0.04);
     set(this.sSine.frequency, sf * 13, 0.04);
-    set(this.sNoiseG.gain, sl * 1.4, 0.04);
+    set(this.sNoiseG.gain, sl * 1.0, 0.04);
 
     // grinder
     const gl = clamp(Number(st.grinderLoad) || 0, 0, 1);
@@ -149,7 +149,7 @@ export class Loops {
       set(this.gHum.frequency, 55 * (1 - 0.25 * gl) * pf, 0.1);
       set(this.gHumG.gain, 0.45, 0.1);
       set(this.gCrunchG.gain, 0.15 + 0.85 * gl, 0.08);
-      this.gCrunch.playbackRate.setTargetAtTime((1.15 - 0.45 * gl) * pf, now, 0.1);
+      set(this.gCrunch.playbackRate, (1.15 - 0.45 * gl) * pf, 0.1);
     }
 
     // slosh grows with fill and drum motion
@@ -160,9 +160,9 @@ export class Loops {
     set(this.sloshLP.frequency, (300 + 380 * Math.min(1, w / 2)) * pf, 0.1);
 
     // patter: rain of droplets beyond what one-shots can carry
-    const pT = on * L.patter * Math.pow(clamp(patterPressure / 10, 0, 1), 0.7);
+    const pT = on * L.patter * Math.pow(clamp((patterPressure || 0) / 10, 0, 1), 0.7);
     set(this.patterGain.gain, pT, 0.08);
-    this.patter.playbackRate.setTargetAtTime(pf, now, 0.05);
+    set(this.patter.playbackRate, pf);
 
     // room hum: present during play, partially masked as the room fills
     set(this.humGain.gain, on * L.hum * (1 - 0.5 * fill), 0.3);

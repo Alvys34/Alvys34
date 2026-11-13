@@ -200,10 +200,10 @@ export class Music {
     this.crushIn.gain.setTargetAtTime(crushG, now, 0.1);
     this.crushOut.gain.setTargetAtTime(wetC / crushG, now, 0.1);
     this.distIn.gain.setTargetAtTime(0.4 + 3.2 * f, now, 0.1);
-    this.distOut.gain.setTargetAtTime(wetD / (1 + 1.2 * f), now, 0.1);
+    this.distOut.gain.setTargetAtTime(wetD / (1 + 2.5 * f), now, 0.1);
     this.dry.gain.setTargetAtTime(1 - 0.75 * Math.max(wetC, wetD), now, 0.1);
     this.degLP.frequency.setTargetAtTime(18000 * Math.pow(2, -4.7 * Math.pow(f, 1.2)), now, 0.1);
-    this.degLP.Q.setTargetAtTime(0.7 + 3.5 * f * f, now, 0.1);
+    this.degLP.Q.setTargetAtTime(0.7 + 2.2 * f * f, now, 0.1);
     this.spkHP.frequency.setTargetAtTime(90 + 300 * f * f, now, 0.2);
     if (this.detune) {
       this.tsConst.offset.setTargetAtTime(1200 * Math.log2(pf), now, 0.04);
@@ -251,7 +251,6 @@ export class Music {
     // bass
     for (const [s, iv, len] of A.bass) {
       if (s !== step) continue;
-      if (halves.length > 1 && s >= 8) { /* second-half chord root */ }
       this.note('bass', chord.root + iv, t, len * sd * 0.9, hv(0.8), 0.25 * f * f);
     }
     // comping

@@ -15,12 +15,13 @@ export const TUNABLES = {
     debrisCap: 140,             // detached parts allowed before the oldest drained ones dissolve
     maxSpeed: 40,               // hard clamp on |v| (safety net against solver explosions), m/s
     maxAngSpeed: 40,            // hard clamp on |w|, rad/s
+    softCcd: 0.25,              // m soft-CCD prediction on thin limbs (hard CCD stretches ragdolls)
   },
 
   drum: {
     width: 16, height: 10, depth: 5,   // interior cross-section (GDD §5)
     wallThickness: 2.0,                // thick static walls = nothing tunnels
-    gravity: 9.81,
+    gravity: 13.0,             // m/s^2 — heavier than real: a 16 m drum seen from afar looks floaty at 9.81
     rotateAccel: 5.0,          // rad/s^2 at full input (GDD §4)
     maxOmega: 2.2,             // rad/s
     rotateKick: 0.12,          // instant |omega| floor on a fresh press (first-frame response)
@@ -35,7 +36,7 @@ export const TUNABLES = {
   },
 
   slam: {
-    deltaV: 11.0,              // m/s instant velocity change along drum-relative up (GDD ~9)
+    deltaV: 12.5,              // m/s instant velocity change along drum-relative up (GDD ~9)
     cooldown: 2.5,             // s
     angularJolt: 3.0,          // rad/s random spin added to parts (sells the jolt)
     dislodgeImpaled: true,
@@ -75,7 +76,7 @@ export const TUNABLES = {
   },
 
   damage: {
-    impactMinDv: 9.5,          // m/s impact (approach) speed before impacts hurt
+    impactMinDv: 11.0,          // m/s impact (approach) speed before impacts hurt
     impactScale: 5.0,          // hp per m/s over threshold (x other-body mass factor)
     impactMassRef: 6.0,        // kg: damage *= sqrt(otherMass / ref) when hit by a body
     impactEventMinDv: 2.5,     // m/s: below this no `impact` sound event
@@ -127,9 +128,9 @@ export const TUNABLES = {
 
   hazards: {
     spikes: {
-      minSpeed: 3.0,           // m/s normal speed before spikes hurt
+      minSpeed: 3.5,           // m/s normal speed before spikes hurt
       damagePerSpeed: 9.0,     // hp per m/s over minSpeed (x part mass factor)
-      impaleSpeed: 7.5,        // m/s normal speed that impales
+      impaleSpeed: 8.5,        // m/s normal speed that impales
       impaleParts: ['chest', 'pelvis', 'thigh', 'head', 'upperArm'],
       impaleBleed: 0.12,       // wound rate added on impale
       maxImpaled: 30,

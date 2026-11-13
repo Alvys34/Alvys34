@@ -81,8 +81,9 @@ export function createBlood(ctx) {
   }
 
   return {
-    update(dt, state) {
-      if (dt <= 0) return;
+    update(dtIn, state) {
+      if (!(dtIn > 0)) return;
+      const dt = Math.min(dtIn, 0.05); // big debug steps: don't teleport droplets through walls
       // sources
       while (pending.length) emitBurst(state, pending.shift());
       for (const b of state.blood.bleeders) {
@@ -93,7 +94,7 @@ export function createBlood(ctx) {
         for (let k = 0; k < n; k++) {
           spawnLocal(state, b.x, b.y, b.z,
             b.dx * sp + (rnd() - 0.5) * 1.6, b.dy * sp + (rnd() - 0.5) * 1.6, b.dz * sp + (rnd() - 0.5) * 1.6,
-            0.025 + rnd() * 0.04);
+            0.02 + rnd() * 0.035);
         }
       }
       // integrate + collide
@@ -128,7 +129,7 @@ export function createBlood(ctx) {
       }
       for (let k = 0; k < count; k++) {
         const sp = Math.hypot(vx[k], vy[k], vz[k]);
-        const stretch = 1 + Math.min(2.5, sp * 0.12);
+        const stretch = 1 + Math.min(1.8, sp * 0.1);
         v.set(vx[k], vy[k], vz[k]);
         if (sp > 1e-3) q.setFromUnitVectors(zAxis, v.multiplyScalar(1 / sp)); else q.identity();
         m4.compose(v.set(px[k], py[k], pz[k]), q, s3.set(sz[k], sz[k], sz[k] * stretch));

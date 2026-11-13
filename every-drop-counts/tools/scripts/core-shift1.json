@@ -1,0 +1,14 @@
+[
+  { "eval": "window.__edc.setTimeScale(0)" },
+  { "step": 230 }, { "shot": "s1-01-start" },
+  { "input": { "rotate": 1 } }, { "step": 45 }, { "shot": "s1-02-rotating" },
+  { "step": 40 }, { "input": { "rotate": 0 } }, { "step": 50 },
+  { "input": { "rotate": -1 } }, { "step": 95 }, { "input": { "rotate": 0 } }, { "step": 25 }, { "shot": "s1-03-tumble" },
+  { "rock": { "steps": 420, "period": 90, "slamEvery": 0 } },
+  { "shot": "s1-04-carnage" },
+  { "input": { "rotate": 0, "slam": true } }, { "step": 9 }, { "shot": "s1-05-slam" },
+  { "rock": { "steps": 1500, "period": 100, "slamEvery": 200 } },
+  { "step": 60 }, { "shot": "s1-06-late" },
+  { "rock": { "steps": 3000, "period": 100, "slamEvery": 200 } },
+  { "step": 200 }, { "shot": "s1-07-end" }
+]

@@ -9,7 +9,8 @@
  *   capacity: L,                   // litres that would fill the whole cross-section (pool speed)
  *   quota: [q1, q2, q3],           // litres for 1 / 2 / 3 drops
  *   startAngle: rad,               // initial drum angle
- *   hatch: { wall, at, offset? },  // intake hatch on a drum wall (tangent coord `at`)
+ *   hatch: { wall, at, offset? },  // intake hatch on a drum wall (tangent coord `at`), or
+ *          { wall: 'back', x, y } // a chute in the back wall: donors drop from mid-drum
  *   hazards: [ { type, wall, ... } ],   // see src/sim/hazards/*.js for each spec
  *   props: [ { type, at: s, pos: [x,y,z] } ],   // optional timed props
  *   waves: [ { at: s, count, types?: {standard: n, ...}, props?: [{type, count}] } ],
@@ -25,11 +26,12 @@ export default {
   subtitle: 'Welcome to the team.',
   duration: 110,
   capacity: 150,
-  quota: [12, 28, 42],
+  quota: [20, 45, 62],
   startAngle: 0,
-  hatch: { wall: 'left', at: -2.6, offset: 1.0 },
+  hatch: { wall: 'back', x: 0, y: 1.0, offset: 1.2 },
   hazards: [
-    { type: 'spikes', wall: 'floor', from: -3.0, to: 8.0, z: [-2.5, 2.5] },
+    { type: 'spikes', wall: 'floor', from: -8.0, to: -2.4, z: [-2.5, 2.5] },
+    { type: 'spikes', wall: 'floor', from: 2.4, to: 8.0, z: [-2.5, 2.5] },
   ],
   waves: [
     { at: 1.5, count: 4 },

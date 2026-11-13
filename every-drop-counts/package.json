@@ -8,7 +8,7 @@
     "dev": "vite --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview --port 5173 --strictPort",
-    "test": "node --test tests/",
+    "test": "node --test --test-concurrency=4 tests/*.test.mjs",
     "sim": "node tools/simbot.mjs"
   },
   "dependencies": {

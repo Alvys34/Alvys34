@@ -107,9 +107,10 @@ export function createUI({ root, bus }) {
       results.innerHTML = `<div class="edc-card"><div class="edc-title">${title}</div>
         <div class="edc-stars">${stars}</div>
         <table class="edc-report">
-          <tr><td>Litres collected</td><td>${r.liters.toFixed(1)} L</td></tr>
+          ${r.collected != null ? `<tr><td>Litres collected</td><td>${r.collected.toFixed(1)} L</td></tr>` : ''}
           ${r.bonus != null ? `<tr><td>Sponsor Match &amp; bonuses</td><td>+${r.bonus.toFixed(1)} L</td></tr>` : ''}
           ${r.fines ? `<tr><td>Fines</td><td>−${r.fines.toFixed(1)} L</td></tr>` : ''}
+          <tr class="edc-total"><td>Total donated</td><td>${r.liters.toFixed(1)} L</td></tr>
           <tr><td>Donors processed</td><td>${r.kills ?? 0}${r.donorsTotal ? ' / ' + r.donorsTotal : ''}</td></tr>
           <tr><td>Drownings (waste)</td><td>${r.drownings ?? 0}</td></tr>
           <tr><td>Complaints received</td><td>0 (donors unavailable for comment)</td></tr>

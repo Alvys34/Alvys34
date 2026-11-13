@@ -36,7 +36,7 @@ export function createRenderer({ canvas, bus, settings = {} }) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   const worldGroup = new THREE.Group(); worldGroup.name = 'world';

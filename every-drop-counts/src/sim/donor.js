@@ -86,9 +86,11 @@ export function spawnDonor(ctx, typeId, x, y, z, opts = {}) {
       .setRotation(q)
       .setLinvel(opts.vx || 0, opts.vy || 0, opts.vz || 0)
       .setLinearDamping(P.linearDamping)
-      .setAngularDamping((P.angularDampingByRole && P.angularDampingByRole[pd.role]) ?? P.angularDamping)
-      .setCanSleep(false);
-    if (shapeThickness(pd.shape) < 0.07) bd.setCcdEnabled(true);
+      .setAngularDamping((P.angularDampingByRole && P.angularDampingByRole[pd.role]) ?? P.angularDamping);
+    // Hard CCD clamps a fast limb at its time of impact while the rest of the ragdoll moves on,
+    // which visibly stretches joints. Thick (2 m) drum walls + the speed clamp already prevent
+    // tunnelling, so thin limbs only get soft (predictive) CCD.
+    if (shapeThickness(pd.shape) < 0.07) bd.setSoftCcdPrediction(T.sim.softCcd);
     const body = world.createRigidBody(bd);
     const mass = tune.mass * def.massScale;
     const cd = colliderDesc(R, pd.shape)
@@ -346,8 +348,10 @@ export function removePart(ctx, part, { release = false } = {}) {
   ctx.world.removeRigidBody(part.body);
   part.removed = true;
   ctx.removedThisStep = true;
-  // remaining blood in a removed part is simply gone (dissolved without a wound)
+  // remaining blood in a removed part is simply gone (dissolved without a wound) — tracked so
+  // blood conservation holds: collected + dissolved + still-in-bodies == donorTotal
   donor.blood -= part.blood;
+  ctx.blood.dissolved += part.blood;
   part.blood = 0;
   if (donor.alive && (part.role === 'head' || part.role === 'chest')) killDonor(ctx, donor, ctx.lastRemoveCause || 'grind');
   if (donor.partList.every((p) => p.removed)) donor.gone = true;
