@@ -202,11 +202,28 @@ draw-call / triangle counts instead (`renderer.info`).
   sim in attract mode with the gate closed, so `shift:start`, impacts, speech etc. from the attract
   scene never reach audio/VFX/achievements. Anything that must hear real gameplay only: listen on the
   main bus as before (nothing changes for you).
-- Extra events: UI emits `ending:start {}` when the shift-8 sting hands over to the camera (VFX: a
-  `view.playEnding()` hook would replace the CSS fallback push-in). `achievement {id}` is persisted,
+- Extra events: UI emits `ending:start {}` when the shift-8 sting hands over to the camera
+  (`view.playEnding()`; the CSS push-in is only a fallback now). `achievement {id}` is persisted,
   toasted and forwarded to Steam by the UI (`src/ui/systems.js`), which also creates CONTENT's tracker.
 - `ui:star {n}` fires as each drop lands on the shift report; `game:pause {paused}` on pause/resume.
 - `__edc.getState().screen` is the UI mode (`boot|menu|briefing|playing|paused|results|ending`);
   `__edc.ui.debug` has helpers for screenshots; `?autopause=1` re-enables focus-loss pause in debug.
 - Save schema (`edc.save.v1`, `src/core/save.js`): every field is sanitised on load; unreadable JSON is
   kept under `edc.save.v1.corrupt` and replaced; `MIGRATIONS[n]` upgrades raw saves from version n.
+
+## Integration notes (INTEGRATION pass) — additive
+
+- `view.update(state, alpha, dt, frame)`: `frame = { realDt, timeScale, paused, slowMo, hitStop }` comes
+  from the loop (`loop.slowMoActive`, `loop.hitStopActive`); post uses it instead of re-deriving feel rules.
+  Every render piece already advances with the sim-scaled `dt`, so particles, runners and pool waves freeze
+  on pause / hit-stop and slow in slow-mo. `loop.stepNow(n)` also counts down slow-mo / hit-stop.
+- Accessibility: `view.setReduceFlashing(bool)` (wired from settings at boot and live) turns off the slam
+  flash, red edges, CA and desaturate snaps, light flicker / tube stutter and the hard lamp blinks.
+- Camera: the HUD reports its top-corner plates (`view.setHudInsets`); at 16:9 / 16:10 near upright the
+  camera reserves a top band (≤ 12 %) so the drum corners are not hidden; 21:9 is unaffected.
+  `view.playEnding()` = shift-8 drift into the intake hatch (only once the shift has ended).
+- Audio: fixed payload curves calibrated on real runs (`tools/audio/calibrate.mjs`); `crusher:stroke`,
+  `grinder:swallow` have sounds; `hasSaw`/`hasGrinder` are passed by `main.js`; the sound bank finishes
+  rendering in the menus (`audio.warmup` at shift start as a backstop).
+- `__edc.perf()` / `__edc.perfReset()`: summed main-thread ms for sim steps / view.update / UI / audio.
+  Boot timeline marks `edc:boot|rapier|renderer|audio|ui|ready` (`performance.getEntriesByType('mark')`).

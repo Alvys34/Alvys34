@@ -4,8 +4,12 @@ Rendering only **reads** `sim.state` and **listens** to bus events. It never mut
 
 ```js
 const view = createRenderer({ canvas, bus, settings });   // src/render/index.js
-view.update(simState, alpha, dt);   // every frame; alpha = interpolation 0..1, dt = sim-scaled seconds
+view.update(simState, alpha, dt, frame);   // every frame; alpha = interpolation 0..1, dt = sim-scaled seconds,
+                                           // frame = { realDt, timeScale, paused, slowMo, hitStop } from the loop
 view.setQuality('low'|'medium'|'high'); view.resize(); view.info(); view.dispose();
+view.setReduceFlashing(bool);              // live: post accents, light flicker, lamp blink (settings.reduceFlashing)
+view.setHudInsets({ top, left, right } | null);  // HUD corner plates (viewport fractions) -> camera top band
+view.playEnding() / view.stopEnding();     // shift-8 ending camera (refuses unless the shift has ended)
 ```
 
 ## Scene graph
@@ -29,8 +33,8 @@ editing its file; keep the factory name and return shape.
 | `donors/hazards.js` | ART | hazard meshes from `hazard.view` (`HAZARD_BUILDERS[kind]`) | `state.hazards[i].view` (spikes: wall/from/to/z0/z1/height; saw: x/y/z0/z1/radius/angle/spin) |
 | `blood/index.js` | VFX | droplets + mist (drum space, rotating-frame ballistics), runners/drips, smears, tide marks (+ `droplets.js`, `atlas.js`, `runners.js`) | `state.blood.bleeders`, `state.parts` (smears), `state.hazards[].view` (saw spray), bus `blood:spurt`, `limb:sever`, `donor:death`, `hazard:contact`, `prop:explode`, `impact`, `slam` |
 | `blood/pool.js` | VFX | pool volume (depth-absorbing slices), wavy glossy surface, foam, bubbles, splashes; `ctx.poolFx` | `state.pool.level/prevLevel`, `fill`, `state.drum.omega/alpha`, `state.dyns` (`sub`), `state.hazards[].view` (churn), bus `splash`, `slam`, `part:dissolve` |
-| `camera.js` | VFX | angle-adaptive fit (whole interior always on screen, 4:3–21:9), sway, shake, kicks, zoom punch | `ctx.drumAngle`, `state.drum.omega`, `settings.screenShake`, `settings.cameraZoomRange`, bus `slam`, `limb:sever`, `combo`, `impact`, `prop:explode` |
-| `post.js` | VFX | HDR target, bloom, grade + fill escalation, ACES, vignette, CA, grain, slam/hit-stop/slow-mo/combo accents; `{ render(dt, state), resize, setQuality, stats, dispose }` | `state.pool.fill`, bus `slam`, `limb:sever`, `donor:death`, `combo`, `prop:explode`, `game:pause` |
+| `camera.js` | VFX | angle-adaptive fit (whole interior always on screen, 4:3–21:9), top band for the HUD plates (≤ 12 % of the height, only while a mid-depth drum corner would sit under a plate: 16:9/16:10 near upright), sway, shake, kicks, zoom punch, shift-8 ending drift into the hatch | `ctx.drumAngle`, `state.drum.omega`, `state.hatch`, `settings.screenShake`, `settings.cameraZoomRange`, `settings.hudInsets`, bus `slam`, `limb:sever`, `combo`, `impact`, `prop:explode`, `shift:start` |
+| `post.js` | VFX | HDR target, bloom, grade + fill escalation, ACES, vignette, CA, grain, slam/hit-stop/slow-mo/combo accents (off with `settings.reduceFlashing`); `{ render(dt, state, frame), resize, setQuality, stats, dispose }` | `state.pool.fill`, `frame` (real pause / slow-mo / hit-stop from the loop), bus `slam`, `prop:explode`, `combo` (+ `limb:sever`, `donor:death`, `game:pause` only without `frame`) |
 
 Interpolation: a part's displayed pose is `lerp(p.px, p.x, alpha)` / `slerp(p.pq*, p.q*, alpha)`;
 the pool level `lerp(prevLevel, level, alpha)`; the drum angle `lerp(prevTheta, theta, alpha)`.

@@ -23,8 +23,14 @@ Optional extras (not part of the contract): `createAudio({ context, seed })` ado
 and `output` (the final node, for metering).
 
 Optional `state` fields read when present: `hasSaw` / `sawCount`, `hasGrinder` / `grinderCount`.
-They start the idle saw whine / grinder hum at shift start. Without them, each loop starts on the
-first saw/grinder contact or a non-zero `sawLoad` / `grinderLoad`, and resets on `shift:start`.
+They start the idle saw whine / grinder hum at shift start (`src/main.js` passes `hasSaw`/`hasGrinder`
+from the level's hazards while playing). Without them, each loop starts on the first saw/grinder
+contact or a non-zero `sawLoad` / `grinderLoad`, and resets on `shift:start`.
+
+Non-contract: `audio.warmup(maxMs)` finishes the sound-bank pre-render synchronously (the UI calls it
+when a shift starts). Normally the bank is already done: after `unlock()` it renders in idle
+macrotasks of ~8 ms while the player is in the menus (~1.2–2.8 s of CPU in total, single renders up to
+~90 ms on a slow CPU); during play only a 1.5 ms/frame trickle runs.
 
 ## Structure
 
@@ -79,9 +85,13 @@ momentary level at the master output for one event at gain 1 (see `tools/audio/t
 | Music | RMS while playing | about -29 RMS; menu louder; paused about -8 dB and low-passed |
 
 Music ducks by up to about 8 dB under slams, explosions, mass deaths, jingles and PA. Payload
-magnitudes (`size`, `speed×mass`, `rate`, `amount`, `intensity`) have no fixed units, so
-`events.js` normalises each one against a slow running average. A typical event lands mid-range
-and a big one goes loud. Impacts use a steep curve so that constant tumbling taps stay quiet.
+magnitudes use FIXED curves calibrated on real sim payloads (`node tools/audio/calibrate.mjs 1,4,7,8 smart`
+prints per-event rates and value percentiles): impact `speed×mass` on a log scale from ~35 (median
+tumbling, silent) to ~900 (top 0.5 %); `blood:splat`/`splash` `size` and `hazard:contact` `intensity`
+are already 0..1; `blood:spurt` `rate` (L/s) and `donor:hurt` `amount` (hp) saturate at 0.6 / 60.
+`impact` kind `metal` (a body against the drum wall, ~70 % of impacts) is a body thud; the shell only
+rings on the hardest hits. Hurt yelps skip dead donors and scuffs under 4 hp. Crusher contacts play
+one big hit per stroke (later contacts: squelch/crack detail).
 
 ### Voice limiting
 
@@ -123,6 +133,8 @@ heavy rain instead of being dropped. Events that land in the same instant are st
 | `splash` | Plop + spray + bubbles + slosh, size-scaled |
 | `hazard:contact` | `saw`: tooth-rate ripping grind with bogging whine (and the saw loop gets a load boost). `spike`: "shunk" (scrape, thud, squish). `grinder`: crunch train. `crusher`: metal slam + crunch + squelch + hiss |
 | `hazard:telegraph` | Crusher: two warning beeps + rising pneumatic hiss. Other hazards: double beep |
+| `crusher:stroke` | Light hydraulic thump on every stroke (even empty) |
+| `grinder:swallow` | Grinder crunch + wet squelch, sized by `liters` (bursts within 120 ms only squelch) |
 | `grinder:clog` / `grinder:clear` | Jam clunk and stalling motor groan (the hum loop drops to a strained 24 Hz) / ka-chunk, wet blorp, rev-up |
 | `slam` | Hydraulic SLAM: sub drop + mid punch + shell clank + rattle + hiss release. Ducks music |
 | `slam:ready` | Tiny pressure tick + soft blip |

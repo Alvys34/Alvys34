@@ -639,11 +639,22 @@ async function runGameFlow() {
   await key('Enter');                                   // briefing: begin
   f.afterBegin = await waitScreen('playing', 10000);
   if (f.afterBegin !== 'playing') { await js('window.__edc.ui.startRun(1), true'); f.startedViaHarness = true; }
+  await js('window.__edc.perfReset && window.__edc.perfReset(), true');
   const t0 = await js('window.__edc.sim.state.time');
+  const w0 = Date.now();
   const th0 = await js('window.__edc.sim.state.drum.theta');
-  await key('D', 3000); await key('A', 2500); await key('Space', 120); await key('D', 1500);
+  // hold keys for a number of RENDERED frames (software GL may present one frame every few seconds)
+  const frames = () => js('window.__edc.loop.stats.frames');
+  const waitFrames = async (n, maxMs = 20000) => { const f0 = await frames(); const t = Date.now(); while ((await frames()) - f0 < n && Date.now() - t < maxMs) await sleep(50); };
+  const hold = async (keyCode, n) => { win.webContents.sendInputEvent({ type: 'keyDown', keyCode }); await waitFrames(n); win.webContents.sendInputEvent({ type: 'keyUp', keyCode }); await waitFrames(1); };
+  await waitFrames(2);                                  // the press that began the shift is swallowed on its first frame
+  await hold('D', 4); await hold('A', 3); await hold('Space', 1); await hold('D', 2);
   f.play = await js(`(() => { const e = window.__edc; const s = e.getState(); return { screen: s.screen, levelId: s.levelId, time: s.time, slams: s.slam && s.slam.count, fps: s.fps, audio: e.audio && e.audio.debug ? { state: e.audio.debug.stats().state, bankQueue: e.audio.debug.stats().bankQueue } : null }; })()`);
   f.simAdvanced = +(f.play.time - t0).toFixed(2);
+  f.playWallMs = Date.now() - w0;
+  // main-thread split while playing (ms per rendered frame / per sim step) + sound bank render cost
+  f.perf = await js(`(() => { const e = window.__edc; const p = e.perf ? e.perf() : null; const a = e.audio && e.audio.debug ? e.audio.debug.stats() : {};
+    return p && { frames: p.frames, steps: p.steps, simPerStep: +(p.sim / Math.max(1, p.steps)).toFixed(2), viewPerFrame: +(p.view / Math.max(1, p.frames)).toFixed(1), uiPerFrame: +(p.ui / Math.max(1, p.frames)).toFixed(2), audioPerFrame: +(p.audio / Math.max(1, p.frames)).toFixed(2), maxFrame: +p.maxFrame.toFixed(0), bankRenderMs: Math.round(a.bankRenderMs || 0), bankMaxRenderMs: Math.round(a.bankMaxRenderMs || 0) }; })()`);
   f.drumTurned = +Math.abs((await js('window.__edc.sim.state.drum.theta')) - th0).toFixed(3);
   await key('Escape'); f.paused = await waitScreen('paused', 4000);
   await key('Escape'); f.resumed = await waitScreen('playing', 4000);

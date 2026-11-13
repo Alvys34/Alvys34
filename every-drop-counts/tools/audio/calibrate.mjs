@@ -1,3 +1,11 @@
+#!/usr/bin/env node
+/**
+ * Audio <-> sim calibration: runs real shifts headless (Node, bot policy) with a bus tap and prints,
+ * per event type, the emission rate and percentiles of the payload magnitudes audio scales by
+ * (speed, mass, speed×mass, size, rate, amount, intensity, liters, pressed). src/audio/events.js
+ * curves are fitted to this output.
+ *   node tools/audio/calibrate.mjs [levels=1,2,...,8|ot] [policy=smart]
+ */
 import RAPIER from '@dimforge/rapier3d-compat';
 import { createBus } from '../../src/core/bus.js';
 import { createSim } from '../../src/sim/index.js';

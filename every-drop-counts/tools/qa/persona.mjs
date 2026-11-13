@@ -51,7 +51,7 @@ try {
       const q = (sel) => { const el = hud.querySelector(sel); return el && el.offsetParent !== null ? el.innerText.replace(/\s+/g, ' ').trim() : null; };
       return { t: +g.time.toFixed(2), screen: g.screen, status: g.status, theta: +g.drum.theta.toFixed(3), omega: +g.drum.omega.toFixed(3), rotIn: +(acc.rot / n).toFixed(2), slamPress: acc.slams,
         liters: +g.liters.toFixed(1), stars: g.stars, kills: g.kills, alive: g.alive, donorsLeft: g.donorsLeft, drown: g.drownings, fill: +g.fill.toFixed(3), bodies: g.bodies, slamReady: g.slam.ready, combo: g.combo.multiplier,
-        prompt: q('.prompt'), pa: q('.pa'), clock: g.clock && +g.clock.left.toFixed(1), errors: g.errors, calls: g.render.calls, tris: g.render.triangles, droplets: g.droplets, ot: g.overtime };
+        prompt: q('.prompt'), pa: q('.pa'), clock: g.clock && g.clock.left != null ? +g.clock.left.toFixed(1) : null, errors: g.errors, calls: g.render.calls, tris: g.render.triangles, droplets: g.droplets, ot: g.overtime };
     }, [n, persona]);
     trace.push(row);
     if (!noShots) await page.screenshot({ path: resolve(dir, `f${String(i).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 78 });

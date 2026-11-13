@@ -90,7 +90,12 @@ unlockAchievement` resolve booleans, no Node globals, WebGL/WebAudio/Gamepad API
 fetch / `window.open` / external navigation blocked, F11 and Alt+Enter toggle fullscreen,
 localStorage survives a relaunch, first launch is fullscreen and a windowed choice is remembered, non-blank screenshot, no page console
 errors, and quitting via `edcDesktop.quit()` exits 0. For a real-game build it loads
-`index.html?debug=1` and also requires `window.__edc.ready` to resolve and `__edc.errors` to be empty.
+`index.html?debug=1&quality=low` and also requires `window.__edc.ready` to resolve and `__edc.errors` to be empty,
+then plays the game with OS-level key events (`runGameFlow` in `src/main.js`): boot splash → title (audio
+unlocks from that press) → Clock in → briefing → shift with D/A/Space → Esc pause/resume → fullscreen
+on/off through the game's settings path → an achievement persisted → (first launch) the shift fast-forwarded
+to its report so a result is saved → back to the title → Quit → Yes (the game's own quit button path).
+The second launch checks the save (best result, achievement, stats) survived.
 Artifacts: `release/smoke/run{1,2}/{report.json,screenshot.png,x11-root.png,stdout.log}`.
 Options: `--direct` (skip the launcher), `--wait <ms>`, `--query <qs>`, `--allow-console-errors`.
 

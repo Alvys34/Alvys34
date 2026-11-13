@@ -4,13 +4,14 @@
  * 16:10), while donors stay as large as possible.
  *
  *   createCameraRig(ctx) -> { update(dt, state), resize(w, h), shake(amount), kick(x, y, amount),
- *                             setScreenShake(v), fit(), dispose() }
+ *                             setScreenShake(v), fit(), playEnding(), stopEnding(), onLevel(), dispose() }
  *
  * Fit: the drum's front opening (2HW x 2HH at z = +HD, the largest thing in perspective) rotated by
  * the drum angle has world half-extents ex = |c|HW + |s|HH, ey = |s|HW + |c|HH. The camera distance
  * is the larger of the vertical/horizontal requirement + a small safe margin (2.5 % of the screen,
  * + 1.2 % for shake at full screenShake). Only the INTERIOR counts: frame, gear rim and facility
- * crop freely; interior corners may pass under the top-corner HUD panels. It ANTICIPATES rotation
+ * crop freely. While the HUD is up (settings.hudInsets) and a mid-depth interior corner would sit under
+ * a top-corner plate, a top band (<= 12 %) is reserved: the drum shrinks a little and moves down. It ANTICIPATES rotation
  * (max extent over the angles swept in the next ~0.7 s), zooms with a critically damped spring whose
  * speed is capped (out <= 90 %/s, in <= 16 %/s, in only after a 0.5 s hold), and is hard-clamped so
  * the current extent can never crop. Zoom punch only uses slack above that clamp. Held still at 0 deg the drum fills the frame;
