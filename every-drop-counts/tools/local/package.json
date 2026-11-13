@@ -1,0 +1,9 @@
+{
+  "name": "edc-local-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local real-GPU tooling (perf, capture). Separate package so the game's package.json stays untouched.",
+  "dependencies": {
+    "playwright": "^1.65.0"
+  }
+}
